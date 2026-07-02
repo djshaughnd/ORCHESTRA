@@ -34,6 +34,12 @@ In order, from the original build plan (docs: studio-director-build-plan.md in t
 - C5. DJI RS4 gimbal spike, timeboxed 1 week: verify RS 4 (non-Pro) on the DJI R SDK supported list → CAN adapter + presets, else Intelligent Tracking Module. Do not extend the timebox.
 - C6. Mission Control/Maestro integration: publish session events (started/ended/markers/paths) over MQTT; session metadata → Postgres on the NAS.
 
+## Reference material on this machine (found 2026-07-02)
+
+- **Blackmagic ATEM Switchers SDK** (822-page PDF): `/Applications/Blackmagic ATEM Switchers/Developer SDK/Blackmagic Switchers SDK.pdf`. Official COM/C++ API — we do NOT link it (atem-connection speaks the network protocol from Node). Use it as the authoritative reference for input IDs / model capabilities if atem-connection misbehaves during hardware bring-up. ATEM Software Control + ATEM Setup are installed alongside it (use ATEM Setup to confirm model + IP for the smoke test). Note for V3: `IBMDSwitcherInput::SetViscaDeviceId` — some ATEMs can proxy VISCA camera control.
+- **OBS source snapshot**: `~/Downloads/obs-studio-master/` (GitHub ZIP of master). CAVEAT: `plugins/obs-websocket` is a git submodule and is EMPTY in a ZIP download — for websocket protocol details use https://github.com/obsproject/obs-websocket/blob/master/docs/generated/protocol.md instead. The snapshot is still useful for frontend/libobs internals; verified there that `obs_frontend_recording_add_chapter` returns false when not recording OR when paused (so chapter markers silently fail during a paused recording — our /session/mark logs a warn and the JSON marker still succeeds).
+- OBS developer guide: https://obsproject.com/kb/developer-guide
+
 ## Context the code can't tell you
 
 - The user (Shaughn) runs DICHEEKO Studio; this ties into a broader "Mission Control / Brain Router" architecture later — `orchestra` should stay a clean standalone service it can talk to.
