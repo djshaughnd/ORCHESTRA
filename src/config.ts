@@ -62,7 +62,18 @@ export const ConfigSchema = z.object({
   obs: z.object({
     url: z.string().url().default('ws://127.0.0.1:4455'),
     password: z.string().default(''),
+    // Fire an OBS chapter marker on /session/mark (OBS 30.2+, Hybrid MP4 only).
+    // Best-effort: failures are logged, the marker itself always succeeds.
+    chapterMarkers: z.boolean().default(true),
   }),
+  companion: z
+    .object({
+      // Push state to Companion custom variables so buttons can change color
+      // without polling. Requires Companion Settings -> HTTP API enabled.
+      enabled: z.boolean().default(false),
+      url: z.string().url().default('http://127.0.0.1:8000'),
+    })
+    .default({}),
   atem: z.object({
     ip: z.string().min(1),
     // false = Companion drives the ATEM; daemon /cut and auto-switch disabled.

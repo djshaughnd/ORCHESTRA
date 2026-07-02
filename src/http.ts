@@ -74,7 +74,18 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
   );
 
   app.post<{ Body: { label?: string } | null }>('/session/mark', async (req) => {
-    return sessions.mark(req.body?.label);
+    const marker = sessions.mark(req.body?.label);
+    // Best-effort OBS chapter marker (30.2+ Hybrid MP4). Only while recording;
+    // must never fail or delay the marker itself.
+    if (cfg.obs.chapterMarkers && obs.isConnected && sessions.activeSession?.recordStartedAt) {
+      obs.createRecordChapter(req.body?.label ?? undefined).catch((err: Error) => {
+        log.warn(
+          { err: err.message },
+          'OBS chapter marker failed (needs OBS 30.2+ recording Hybrid MP4)',
+        );
+      });
+    }
+    return marker;
   });
 
   app.post('/session/end', async () => {

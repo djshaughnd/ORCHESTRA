@@ -4,7 +4,7 @@
 
 ## Where things stand
 
-**V1 + V2 are code-complete, tested (42/42), typecheck clean, pushed to main.**
+**V1 + V2 are code-complete, tested (49/49), typecheck clean, pushed to main.**
 
 Working today: session lifecycle (`/session/start|mark|end`), record control, health checks + 30s monitor with macOS notifications, NAS rsync with retries, profile system (podcast/music/dj/content in studio.yaml), ATEM client (atem-connection, behind `atem.enabled` flag), rule-based auto-switching (rotation + manual-override pause + kill switch), audio-reactive closeup cuts (OBS InputVolumeMeters), take auto-renaming, dashboard at `GET /`.
 
@@ -19,9 +19,9 @@ Working today: session lifecycle (`/session/start|mark|end`), record control, he
 ## Known gaps / small tickets (V2 polish)
 
 - amaran lighting: NOT implemented. Blocked on the user's Sidus OpenAPI token (applied-for; takes days). When granted: `src/clients/amaran.ts` calling the local amaran Desktop OpenAPI, `lightingPreset` per profile already exists in config, apply on session start.
-- Companion feedback push: `/health` polling works, but consider pushing state to Companion's HTTP API to flip button colors on failures.
-- OBS chapter markers (OBS 30.2+ Hybrid MP4): `/session/mark` could also fire the OBS chapter-marker hotkey.
-- launchd plist has placeholder paths (`~/studio/orchestra`) — repo actually lives at `~/Documents/GitHub/ORCHESTRA`; fix before installing the service.
+- ~~Companion feedback push~~ DONE (2026-07-02): `src/clients/companion.ts` pushes `orchestra_health` (`ok`/`fail`) to Companion custom variables on health-monitor transitions. Gated by `companion.enabled` in studio.yaml; needs Companion's HTTP API enabled. Fire-and-forget, 2s timeout, never affects the studio.
+- ~~OBS chapter markers~~ DONE (2026-07-02): `/session/mark` also calls obs-websocket `CreateRecordChapter` (cleaner than the hotkey) while recording. Best-effort; needs OBS 30.2+ recording Hybrid MP4. Toggle: `obs.chapterMarkers` (default true).
+- ~~launchd plist placeholder paths~~ DONE (2026-07-02): plist now points at `~/Documents/GitHub/ORCHESTRA` and node at `~/.local/node/bin/node` (verified via `which node` — homebrew node is NOT installed on this machine).
 
 ## V3 (GATED — do not start until 10+ clean real V2 sessions)
 

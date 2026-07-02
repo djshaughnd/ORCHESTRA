@@ -5,6 +5,7 @@ import { loadConfig, resolveProfile, type Config } from './config.js';
 import { createLogger } from './log.js';
 import { ObsClient } from './clients/obs.js';
 import { createAtemClient } from './clients/atem.js';
+import { CompanionClient } from './clients/companion.js';
 import { namePartsForNow, SessionManager } from './session.js';
 import { startNasSync } from './jobs/sync.js';
 import { buildServer, type StudioState } from './http.js';
@@ -37,6 +38,11 @@ async function main(): Promise<void> {
   const state: StudioState = { activeProfile: cfg.activeProfile };
   const obs = new ObsClient(cfg.obs.url, cfg.obs.password, log.child({ client: 'obs' }));
   const atem = createAtemClient(cfg.atem.ip, cfg.atem.enabled, log.child({ client: 'atem' }));
+  const companion = new CompanionClient(
+    cfg.companion.url,
+    cfg.companion.enabled,
+    log.child({ client: 'companion' }),
+  );
   const director = new Director(atem, log.child({ mod: 'director' }));
 
   const sessions = new SessionManager(
@@ -134,7 +140,9 @@ async function main(): Promise<void> {
       obsDroppedFrames: () => obs.getStats(),
       minFreeGB: cfg.health.minFreeGB,
     });
-  const monitor = new HealthMonitor(runChecks, log.child({ mod: 'monitor' }));
+  const monitor = new HealthMonitor(runChecks, log.child({ mod: 'monitor' }), {
+    onTransition: (ok) => companion.pushHealth(ok),
+  });
 
   // ------------------------------------------------------------------ HTTP
 

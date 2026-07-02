@@ -14,21 +14,35 @@ export function macNotify(title: string, message: string): void {
   });
 }
 
+export interface HealthMonitorOpts {
+  notify?: NotifyFn;
+  intervalMs?: number;
+  /** Fired on every ok-state transition (including the first check). */
+  onTransition?: (ok: boolean) => void;
+}
+
 /**
  * Health monitor loop (V2): runs checks every intervalMs while a session
  * is armed. Notifies on state TRANSITIONS only (ok→fail, fail→ok) so it
- * never spams. Companion can keep polling GET /health for button color.
+ * never spams. Companion can keep polling GET /health for button color,
+ * or receive pushes via onTransition -> CompanionClient.
  */
 export class HealthMonitor {
   private timer: NodeJS.Timeout | null = null;
   private lastOk: boolean | null = null;
+  private notify: NotifyFn;
+  private intervalMs: number;
+  private onTransition: ((ok: boolean) => void) | null;
 
   constructor(
     private run: () => Promise<HealthReport>,
     private log: Logger,
-    private notify: NotifyFn = macNotify,
-    private intervalMs = 30_000,
-  ) {}
+    opts: HealthMonitorOpts = {},
+  ) {
+    this.notify = opts.notify ?? macNotify;
+    this.intervalMs = opts.intervalMs ?? 30_000;
+    this.onTransition = opts.onTransition ?? null;
+  }
 
   get running(): boolean {
     return this.timer !== null;
@@ -60,6 +74,12 @@ export class HealthMonitor {
       return;
     }
     if (report.ok !== this.lastOk) {
+      try {
+        this.onTransition?.(report.ok);
+      } catch (err) {
+        // A listener must never break the monitor loop.
+        this.log.error({ err: (err as Error).message }, 'health transition listener failed');
+      }
       if (!report.ok) {
         const failed = Object.entries(report.checks)
           .filter(([, c]) => !c.ok)

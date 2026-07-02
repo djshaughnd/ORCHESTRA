@@ -151,6 +151,11 @@ export class ObsClient {
     };
   }
 
+  /** OBS 30.2+ (obs-websocket 5.5): chapter marker in a Hybrid MP4 recording. */
+  async createRecordChapter(name?: string): Promise<void> {
+    await this.call('CreateRecordChapter', name ? { chapterName: name } : undefined);
+  }
+
   async getStats(): Promise<{ skipped: number; total: number }> {
     const res = await this.call<{
       outputSkippedFrames: number;

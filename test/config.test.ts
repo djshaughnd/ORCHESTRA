@@ -17,6 +17,9 @@ describe('config validation', () => {
     expect(cfg.nas.rsyncFlags).toContain('--checksum');
     expect(cfg.atem.enabled).toBe(false);
     expect(cfg.activeProfile).toBe('default');
+    expect(cfg.obs.chapterMarkers).toBe(true);
+    expect(cfg.companion.enabled).toBe(false);
+    expect(cfg.companion.url).toBe('http://127.0.0.1:8000');
   });
 
   it('expands ~ in recordingsRoot', () => {

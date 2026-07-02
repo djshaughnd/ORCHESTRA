@@ -5,24 +5,24 @@
     <key>Label</key>
     <string>com.dicheeko.orchestra</string>
 
-    <!-- Adjust paths: node via nvm/homebrew, repo location -->
+    <!-- Paths match this machine (`which node`); re-check if node moves -->
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/bin/node</string>
+        <string>/Users/shaughnyd/.local/node/bin/node</string>
         <string>--import</string>
         <string>tsx</string>
-        <string>/Users/shaughnyd/studio/orchestra/src/index.ts</string>
+        <string>/Users/shaughnyd/Documents/GitHub/ORCHESTRA/src/index.ts</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/shaughnyd/studio/orchestra</string>
+    <string>/Users/shaughnyd/Documents/GitHub/ORCHESTRA</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/Users/shaughnyd/.local/node/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>ORCHESTRA_CONFIG</key>
-        <string>/Users/shaughnyd/studio/orchestra/config/studio.yaml</string>
+        <string>/Users/shaughnyd/Documents/GitHub/ORCHESTRA/config/studio.yaml</string>
     </dict>
 
     <key>RunAtLoad</key>
@@ -36,8 +36,8 @@
     <integer>5</integer>
 
     <key>StandardOutPath</key>
-    <string>/Users/shaughnyd/studio/orchestra/logs/launchd.out.log</string>
+    <string>/Users/shaughnyd/Documents/GitHub/ORCHESTRA/logs/launchd.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/shaughnyd/studio/orchestra/logs/launchd.err.log</string>
+    <string>/Users/shaughnyd/Documents/GitHub/ORCHESTRA/logs/launchd.err.log</string>
 </dict>
 </plist>

@@ -38,9 +38,9 @@ npm run typecheck
 **4. Install as a launchd service** (starts at login, restarts on crash):
 
 ```bash
-# Edit launchd/com.dicheeko.orchestra.plist first:
-#   - fix the node path (`which node`)
-#   - fix the repo path if not ~/studio/orchestra
+# Paths in launchd/com.dicheeko.orchestra.plist are set for this machine
+# (repo at ~/Documents/GitHub/ORCHESTRA, node at ~/.local/node/bin).
+# Re-check the node path (`which node`) if the toolchain moves.
 cp launchd/com.dicheeko.orchestra.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.dicheeko.orchestra.plist
 launchctl list | grep orchestra   # verify running
@@ -58,7 +58,7 @@ All JSON, on `http://127.0.0.1:8722`.
 | Method | Path | Body | Notes |
 |---|---|---|---|
 | POST | `/session/start` | `{name?, profile?}` | Creates dated session folder (profile template), switches OBS scene collection, points OBS record dir at it, starts the health monitor. 409 if a session is active. |
-| POST | `/session/mark` | `{label?}` | Timestamped marker. 409 if no session. |
+| POST | `/session/mark` | `{label?}` | Timestamped marker. While recording, also drops an OBS chapter marker (30.2+ Hybrid MP4, best-effort). 409 if no session. |
 | POST | `/session/end` | — | Stops recording if running, writes `session.json`, fires NAS sync, stops monitor + auto-switch, returns manifest. |
 | POST | `/record/start` | — | OBS StartRecord. 409 if no session. |
 | POST | `/record/stop` | — | OBS StopRecord. **Always attempts**, never 409s. Finished takes are auto-renamed to the profile's `fileTemplate`. |
@@ -101,6 +101,8 @@ curl -X POST http://127.0.0.1:8722/cut/2          # manual cut (pauses auto for 
 
 Use the `/health` response's `ok` field for button feedback color.
 
+**Push feedback (no polling):** set `companion.enabled: true` in `studio.yaml` and enable Companion's HTTP API (Companion Settings → HTTP API, default port 8000). The daemon then pushes health transitions to the custom variable `orchestra_health` (`ok` / `fail`) — reference it in a button feedback as `$(internal:custom_orchestra_health)` to flip the color the moment a check fails.
+
 ## Auto-switching rules (V2)
 
 Configured per profile in `studio.yaml` under `autoSwitch`:
@@ -118,7 +120,7 @@ Requires `atem.enabled: true` (daemon connects to the ATEM over Ethernet via `at
 - `session/end` is crash-safe: `session.json` is written **before** NAS sync starts. Sync failures retry ×3 and never block the response.
 - SIGTERM never stops an active recording — OBS outlives the daemon by design.
 - Recording is **local SSD only**; sync to NAS happens post-session via rsync `--checksum`.
-- Health monitor runs every 30s while a session is armed; failures fire a macOS notification (transitions only, no spam).
+- Health monitor runs every 30s while a session is armed; failures fire a macOS notification and (when enabled) a Companion variable push (transitions only, no spam). Companion being down never affects the studio — pushes are fire-and-forget with a 2s timeout.
 - Every device command is logged with a `sessionId` correlation field.
 
 ## Manual test plan (run with OBS open)

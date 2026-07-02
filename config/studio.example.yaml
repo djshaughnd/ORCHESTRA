@@ -20,6 +20,17 @@ obs:
   # OBS 28+: Tools -> WebSocket Server Settings -> Enable, set password.
   url: "ws://127.0.0.1:4455"
   password: "CHANGE_ME"
+  # /session/mark also drops an OBS chapter marker into the recording
+  # (OBS 30.2+, Hybrid MP4 output only). Best-effort — safe to leave on.
+  chapterMarkers: true
+
+companion:
+  # Push state to Companion custom variables so buttons flip color on failure
+  # without polling. Enable Companion Settings -> HTTP API first.
+  # Currently pushed: orchestra_health = "ok" | "fail" (health transitions).
+  # Reference in Companion feedbacks as $(internal:custom_orchestra_health).
+  enabled: false
+  url: "http://127.0.0.1:8000"
 
 atem:
   # Static IP of the ATEM (Pro-tier units have Ethernet).
