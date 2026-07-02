@@ -8,13 +8,14 @@
 
 Working today: session lifecycle (`/session/start|mark|end`), record control, health checks + 30s monitor with macOS notifications, NAS rsync with retries, profile system (podcast/music/dj/content in studio.yaml), ATEM client (atem-connection, behind `atem.enabled` flag), rule-based auto-switching (rotation + manual-override pause + kill switch), audio-reactive closeup cuts (OBS InputVolumeMeters), take auto-renaming, dashboard at `GET /`.
 
-**Not yet validated against real hardware.** Nothing has run against a real ATEM or a real multi-take session yet.
+**Real-hardware checks PASSED (2026-07-02):** ATEM confirmed as **ATEM Mini Pro ISO** at 192.168.1.99 (MAC 7c:2e:0d:1f:31:3f — needs a DHCP reservation), studio.yaml updated with `atem.enabled: true`. Daemon `POST /cut/2` smoke test verified against live ATEM state. Auto-switch dry run on the podcast profile: rotation cuts within 5–15s bounds, never repeated current cam, kill switch disarmed instantly. OBS 32.1.2 connected (note: OBS WebSocket auth appears OFF — config password is still CHANGE_ME and it connects anyway).
 
 ## Immediate next steps (before ANY new features)
 
-1. Walk the user through the manual test plan in README.md with OBS open — fix whatever it shakes out.
-2. First real-hardware checks: ATEM model confirmation (Ethernet? ISO?), `atem.enabled: true` smoke test (`POST /cut/2`), auto-switch dry run.
+1. **Recordings disk has ~14.5 GB free (min 50)** — health check is red; clear space before a real session.
+2. Walk the user through the remaining manual test plan in README.md (record/rename/markers/end — steps 4–7, 10) — fix whatever it shakes out.
 3. Help the user wire Companion buttons (curl commands in README).
+4. NAS: still `enabled: false` — set up SSH key auth to the UGREEN NAS and test sync (step 11).
 
 ## Known gaps / small tickets (V2 polish)
 
