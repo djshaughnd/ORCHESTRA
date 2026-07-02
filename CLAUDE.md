@@ -42,3 +42,8 @@ Engine/state-machine code must be clock-free and deterministic: drive via `tick(
 ## Status
 
 V1 + V2 complete (see HANDOFF.md for detail and V3 tickets). V3 is GATED: do not start V3 work until the user confirms 10+ clean real V2 sessions.
+
+## Docs
+
+- `HANDOFF.md` — current state, open tickets, V3 plan. Update it when tickets complete.
+- `docs/sdk-references.md` — external SDK links (Sony, DJI, etc.) with notes on which V3 tickets need them. Read before starting C4/C5.
