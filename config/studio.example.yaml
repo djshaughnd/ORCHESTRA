@@ -1,0 +1,42 @@
+# ORCHESTRA studio config — copy to config/studio.yaml and edit.
+# The whole studio is defined in this one file. Version it in git
+# (studio.yaml itself is gitignored; keep this example current).
+
+# Where sessions are recorded. LOCAL SSD ONLY — never a network path.
+# Finished sessions are rsynced to the NAS after the fact.
+recordingsRoot: "~/Recordings"
+
+nas:
+  # Set true once the UGREEN NAS is reachable over SSH with key auth.
+  enabled: false
+  # Hostname or static IP of the NAS (DHCP reservation — no mDNS).
+  host: "192.168.1.50"
+  # Absolute path on the NAS where session folders land.
+  remotePath: "/volume1/studio/sessions"
+  # rsync flags. --checksum verifies content; --partial resumes big files.
+  rsyncFlags: ["-a", "--checksum", "--partial"]
+
+obs:
+  # OBS 28+: Tools -> WebSocket Server Settings -> Enable, set password.
+  url: "ws://127.0.0.1:4455"
+  password: "CHANGE_ME"
+
+atem:
+  # Static IP of the ATEM (Pro-tier units have Ethernet).
+  # Unused by the daemon in V1 (Companion drives the ATEM) but validated
+  # now so the studio definition is complete.
+  ip: "192.168.1.60"
+
+health:
+  # /health fails the disk check below this much free space.
+  minFreeGB: 50
+
+session:
+  # Folder name template. Available: {date} {time} {slug} {profile}
+  # e.g. 2026-07-02_1430_podcast-ep12
+  nameTemplate: "{date}_{time}_{slug}"
+
+http:
+  # Companion calls the daemon here (Generic HTTP module).
+  port: 8722
+  host: "127.0.0.1"

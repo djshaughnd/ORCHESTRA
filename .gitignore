@@ -1,0 +1,6 @@
+node_modules/
+dist/
+logs/
+config/studio.yaml
+*.log
+.DS_Store
