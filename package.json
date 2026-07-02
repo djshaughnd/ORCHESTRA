@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "atem-connection": "^3.2.0",
     "fastify": "^4.28.1",
     "obs-websocket-js": "^5.0.6",
     "pino": "^9.4.0",

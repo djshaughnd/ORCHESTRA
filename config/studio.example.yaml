@@ -23,18 +23,66 @@ obs:
 
 atem:
   # Static IP of the ATEM (Pro-tier units have Ethernet).
-  # Unused by the daemon in V1 (Companion drives the ATEM) but validated
-  # now so the studio definition is complete.
   ip: "192.168.1.60"
+  # false = Companion drives the ATEM (V1 mode). true = daemon connects
+  # directly (needed for /cut/:cam and auto-switching).
+  enabled: false
 
 health:
   # /health fails the disk check below this much free space.
   minFreeGB: 50
 
 session:
-  # Folder name template. Available: {date} {time} {slug} {profile}
-  # e.g. 2026-07-02_1430_podcast-ep12
+  # Default folder name template (profiles can override).
+  # Available: {date} {time} {slug} {profile}
   nameTemplate: "{date}_{time}_{slug}"
+
+# ---------------------------------------------------------------------------
+# Profiles (V2). The one button reads activeProfile; switch profiles from a
+# Stream Deck button via POST /profile/:name.
+# ---------------------------------------------------------------------------
+activeProfile: "default"
+
+profiles:
+  podcast:
+    nameTemplate: "{date}_{profile}_{slug}"
+    fileTemplate: "{date}_{profile}_take{take}"
+    obsSceneCollection: "Studio"
+    atemDefaultCam: 1
+    autoSwitch:
+      enabled: true
+      cameras: [1, 2, 3]
+      minShotSeconds: 5
+      maxShotSeconds: 15
+      overridePauseSeconds: 20
+      audio:
+        enabled: true
+        obsInput: "Mic/Aux"     # OBS input name driving the closeup rule
+        closeupCam: 2
+        thresholdDb: -30
+        sustainMs: 1500
+
+  music:
+    nameTemplate: "{date}_{profile}_{slug}"
+    atemDefaultCam: 1
+    autoSwitch:
+      enabled: true
+      cameras: [1, 2, 3, 4]
+      minShotSeconds: 3
+      maxShotSeconds: 8
+      overridePauseSeconds: 15
+      audio:
+        enabled: false
+
+  dj:
+    atemDefaultCam: 2
+    autoSwitch:
+      enabled: false
+
+  content:
+    nameTemplate: "{date}_{time}_{slug}"
+    autoSwitch:
+      enabled: false
 
 http:
   # Companion calls the daemon here (Generic HTTP module).

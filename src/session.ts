@@ -68,6 +68,7 @@ export interface SessionManifest {
   startedAt: string;
   endedAt: string | null;
   recordStartedAt: string | null;
+  takes: number;
   markers: Marker[];
   files: string[];
 }
@@ -79,6 +80,7 @@ export interface ActiveSession {
   path: string;
   startedAt: Date;
   recordStartedAt: Date | null;
+  takes: number;
   markers: Marker[];
   files: string[];
 }
@@ -103,7 +105,7 @@ export class SessionManager {
 
   constructor(
     private recordingsRoot: string,
-    private nameTemplate: string,
+    private resolveNameTemplate: (profile: string) => string,
     private obs: ObsForSession,
     private syncJob: SyncJob,
     private log: Logger,
@@ -113,7 +115,7 @@ export class SessionManager {
     return this.active;
   }
 
-  /** Called by the OBS event handler when a recording file finishes. */
+  /** Called by the OBS event handler when a recording starts. */
   noteRecordingStarted(): void {
     if (this.active && !this.active.recordStartedAt) {
       this.active.recordStartedAt = new Date();
@@ -127,12 +129,19 @@ export class SessionManager {
     }
   }
 
+  /** Increment and return the take counter (used for file renaming). */
+  nextTakeNumber(): number {
+    if (!this.active) return 0;
+    return ++this.active.takes;
+  }
+
   async start(name?: string, profile?: string): Promise<{ sessionId: string; path: string }> {
     if (this.active) {
       throw new ConflictError(`Session ${this.active.id} already active — end it first`);
     }
     const parts = namePartsForNow(new Date(), name, profile);
-    const folderName = renderNameTemplate(this.nameTemplate, parts);
+    const template = this.resolveNameTemplate(parts.profile);
+    const folderName = renderNameTemplate(template, parts);
     const path = resolve(this.recordingsRoot, folderName);
     mkdirSync(path, { recursive: true });
 
@@ -145,11 +154,12 @@ export class SessionManager {
       path,
       startedAt: new Date(),
       recordStartedAt: null,
+      takes: 0,
       markers: [],
       files: [],
     };
     this.active = session;
-    this.log.info({ sessionId: session.id, path }, 'session started');
+    this.log.info({ sessionId: session.id, path, profile: session.profile }, 'session started');
     return { sessionId: session.id, path };
   }
 
@@ -216,6 +226,7 @@ export class SessionManager {
       startedAt: session.startedAt.toISOString(),
       endedAt: new Date().toISOString(),
       recordStartedAt: session.recordStartedAt?.toISOString() ?? null,
+      takes: session.takes,
       markers: session.markers,
       files: session.files,
     };

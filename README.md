@@ -1,11 +1,12 @@
 # ORCHESTRA
 
-Local studio-automation daemon for DICHEEKO Studio — the MVP backend of a one-button recording platform. Node 20 + TypeScript + Fastify. No AI, no auto-switching in this version. Reliability over features.
+Local studio-automation daemon for DICHEEKO Studio — the backend of a one-button recording platform. Node 20 + TypeScript + Fastify. Reliability over features.
 
-The Stream Deck (via Bitfocus Companion) is the UI. ORCHESTRA handles what Companion can't: session folders, file naming, manifests, health checks, and post-session sync to the NAS.
+The Stream Deck (via Bitfocus Companion) is the UI. ORCHESTRA handles what Companion can't: session folders, file naming, manifests, health checks, post-session NAS sync — and, in V2 mode, profile-driven rule-based auto-switching with audio-reactive cuts.
 
 ```
 Stream Deck → Companion → { ATEM (Ethernet), OBS (WebSocket :4455), ORCHESTRA (HTTP :8722) }
+                                   ▲ (optional V2: daemon cuts the ATEM directly via atem-connection)
 ```
 
 ## Setup
@@ -48,7 +49,7 @@ launchctl list | grep orchestra   # verify running
 launchctl unload ~/Library/LaunchAgents/com.dicheeko.orchestra.plist
 ```
 
-Logs land in `logs/orchestra.log` (plus launchd stdout/err logs).
+Logs land in `logs/orchestra.log` (plus launchd stdout/err logs). A live status dashboard is served at `http://127.0.0.1:8722/` — nice on an iPad in the booth.
 
 ## HTTP API
 
@@ -56,65 +57,84 @@ All JSON, on `http://127.0.0.1:8722`.
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
-| POST | `/session/start` | `{name?, profile?}` | Creates dated session folder, points OBS record dir at it. 409 if a session is active. |
+| POST | `/session/start` | `{name?, profile?}` | Creates dated session folder (profile template), switches OBS scene collection, points OBS record dir at it, starts the health monitor. 409 if a session is active. |
 | POST | `/session/mark` | `{label?}` | Timestamped marker. 409 if no session. |
-| POST | `/session/end` | — | Stops recording if running, writes `session.json`, fires NAS sync, returns manifest. |
+| POST | `/session/end` | — | Stops recording if running, writes `session.json`, fires NAS sync, stops monitor + auto-switch, returns manifest. |
 | POST | `/record/start` | — | OBS StartRecord. 409 if no session. |
-| POST | `/record/stop` | — | OBS StopRecord. **Always attempts**, never 409s. |
-| GET | `/health` | — | Parallel checks (2s timeouts): OBS, disk free, NAS ping. Never throws. |
-| GET | `/status` | — | Current session, OBS record state, uptime. |
+| POST | `/record/stop` | — | OBS StopRecord. **Always attempts**, never 409s. Finished takes are auto-renamed to the profile's `fileTemplate`. |
+| POST | `/cut/:cam` | — | ATEM program cut (requires `atem.enabled: true`). Also registers a manual override that pauses auto-switching. |
+| POST | `/auto/arm` | — | Arm rule-based auto-switching using the active profile. 400 if disabled in config. |
+| POST | `/auto/disarm` | — | **Kill switch.** Always succeeds. |
+| GET | `/profiles` | — | Active + available profiles. |
+| POST | `/profile/:name` | — | Switch active profile (podcast / music / dj / content / default). |
+| GET | `/health` | — | Parallel checks (2s timeouts): OBS, disk free, NAS ping, OBS dropped frames. Never throws. |
+| GET | `/status` | — | Session, profile, auto-switch state, OBS/ATEM connectivity, record state, uptime. |
+| GET | `/` | — | Live HTML dashboard (polls /status + /health). |
 
 ## Companion buttons (Generic HTTP module)
 
 Point Companion's **Generic HTTP** instance at `http://127.0.0.1:8722`, then:
 
-**GO** (one button = session + record) — two actions in sequence:
+**GO** (one button = session + record):
 
 ```bash
 curl -X POST http://127.0.0.1:8722/session/start -H 'Content-Type: application/json' -d '{"name":"podcast"}'
 curl -X POST http://127.0.0.1:8722/record/start
 ```
 
-**MARK** (good-take marker):
+**MARK** / **END** / **HEALTH**:
 
 ```bash
 curl -X POST http://127.0.0.1:8722/session/mark -H 'Content-Type: application/json' -d '{"label":"good take"}'
-```
-
-**END** (stop + manifest + NAS sync):
-
-```bash
 curl -X POST http://127.0.0.1:8722/session/end
-```
-
-**HEALTH** (green/red readiness button):
-
-```bash
 curl http://127.0.0.1:8722/health
 ```
 
-In Companion, add these as HTTP POST/GET actions on buttons; use the `/health` response's `ok` field for button feedback color.
+**Profile select** (one button per profile) and **auto-director**:
+
+```bash
+curl -X POST http://127.0.0.1:8722/profile/podcast
+curl -X POST http://127.0.0.1:8722/auto/arm
+curl -X POST http://127.0.0.1:8722/auto/disarm    # KILL SWITCH — keep this on the deck
+curl -X POST http://127.0.0.1:8722/cut/2          # manual cut (pauses auto for N seconds)
+```
+
+Use the `/health` response's `ok` field for button feedback color.
+
+## Auto-switching rules (V2)
+
+Configured per profile in `studio.yaml` under `autoSwitch`:
+
+- Rotation: random camera from `cameras` after a random shot length in `[minShotSeconds, maxShotSeconds]`. Never repeats the current cam, never machine-guns.
+- Manual override always wins: any `/cut` pauses auto mode for `overridePauseSeconds`.
+- Audio rule: sustained level (≥ `thresholdDb` for `sustainMs`) on `audio.obsInput` favors `closeupCam`. Driven by OBS `InputVolumeMeters` — zero ML, ~70% of the "AI director" feel.
+- The auto-director is **advisory-plumbing only**: a dead daemon degrades to manual Companion buttons; the ATEM hardware panel always works.
+
+Requires `atem.enabled: true` (daemon connects to the ATEM over Ethernet via `atem-connection`). With `atem.enabled: false` the daemon stays in V1 mode and Companion drives all cuts.
 
 ## Behavior guarantees
 
 - OBS client auto-reconnects with exponential backoff (1s → 30s cap) and re-queries record state on reconnect. Commands fail fast when OBS is down — HTTP requests never hang.
 - `session/end` is crash-safe: `session.json` is written **before** NAS sync starts. Sync failures retry ×3 and never block the response.
-- SIGTERM never stops an active recording — OBS outlives the daemon by design. The ATEM hardware panel and OBS hotkeys always work regardless of daemon state.
+- SIGTERM never stops an active recording — OBS outlives the daemon by design.
 - Recording is **local SSD only**; sync to NAS happens post-session via rsync `--checksum`.
+- Health monitor runs every 30s while a session is armed; failures fire a macOS notification (transitions only, no spam).
 - Every device command is logged with a `sessionId` correlation field.
 
 ## Manual test plan (run with OBS open)
 
-1. **Boot:** `npm start` with a bad password in `studio.yaml` → confirm daemon logs OBS connect failures and retries with backoff. Fix the password → confirm `connected to OBS WebSocket` in the log.
-2. **Health:** `curl localhost:8722/health` → `ok: true`, obs + disk checks pass. Quit OBS → health goes `ok: false` with a clear obs detail. Reopen OBS → daemon auto-reconnects within ~30s.
-3. **Session start:** `curl -X POST localhost:8722/session/start -d '{"name":"smoke test"}' -H 'Content-Type: application/json'` → folder `~/Recordings/<date>_<time>_smoke-test/` exists, OBS Settings → Output shows the record path pointed there.
-4. **409 guard:** run the same start again → HTTP 409.
-5. **Record:** `curl -X POST localhost:8722/record/start` → OBS shows REC. Wait 10s. `curl -X POST localhost:8722/session/mark -d '{"label":"t1"}' -H 'Content-Type: application/json'` → returns marker with `sinceRecordStartMs` ≈ 10000.
-6. **End:** `curl -X POST localhost:8722/session/end` → OBS stops recording; `session.json` in the session folder lists the .mkv/.mp4 file and the marker; response is the manifest.
-7. **Weird-state stop:** with no session, `curl -X POST localhost:8722/record/stop` → 200, `outputPath: null` (never errors).
-8. **Crash safety:** start a session + recording, `kill -TERM <pid>` → daemon exits with a loud warning, OBS **keeps recording**. Restart daemon, `curl localhost:8722/status` → `record.active: true`.
-9. **NAS sync** (once `nas.enabled: true`): end a session → watch `logs/orchestra.log` for `NAS sync complete`; verify the folder on the NAS. Pull the NAS cable and end another session → 3 retry log lines, session stays local, daemon unaffected.
+1. **Boot:** `npm start` with a bad password in `studio.yaml` → daemon logs OBS connect failures with backoff. Fix → `connected to OBS WebSocket`.
+2. **Health:** `curl localhost:8722/health` → `ok: true`. Quit OBS → `ok: false` with clear detail. Reopen → auto-reconnect within ~30s.
+3. **Dashboard:** open `http://127.0.0.1:8722/` — tiles update every 2s.
+4. **Session start:** `curl -X POST localhost:8722/session/start -d '{"name":"smoke test"}' -H 'Content-Type: application/json'` → dated folder exists, OBS record path points there. Same call again → 409.
+5. **Record + rename:** `curl -X POST localhost:8722/record/start`, wait 10s, `curl -X POST localhost:8722/record/stop` → file in the session folder renamed to `<date>_<profile>_take1.<ext>`. Record again → `take2`.
+6. **Markers:** while recording, MARK → `sinceRecordStartMs` matches the elapsed time.
+7. **End:** `curl -X POST localhost:8722/session/end` → `session.json` lists takes, markers, files.
+8. **Profiles:** `curl -X POST localhost:8722/profile/podcast` → `/status` shows it; session folders use the podcast template.
+9. **Auto-switch** (needs `atem.enabled: true` + ATEM on the LAN): `curl -X POST localhost:8722/auto/arm` → cuts every 5–15s, never the same cam twice. `curl -X POST localhost:8722/cut/1` → auto pauses ~20s. Speak into the mic ≥1.5s → cut to closeup cam. `/auto/disarm` → stops instantly.
+10. **Crash safety:** start session + record, `kill -TERM <pid>` → loud warning, OBS keeps recording.
+11. **NAS sync** (once `nas.enabled: true`): end a session → `NAS sync complete` in log; folder on NAS. Pull NAS cable → 3 retries, session stays local, daemon unaffected.
 
 ## Roadmap
 
-V1 (this repo): session lifecycle, health, sync. V2: profiles in `studio.yaml`, `atem-connection` client, rule-based auto-switching, audio-reactive cuts. V3: Jetson vision node over MQTT, Sony Camera Remote SDK, Mission Control integration. See `studio-director-build-plan.md` in the project docs.
+V1 ✅ session lifecycle, health, sync. V2 ✅ (this code): profiles, ATEM client, rule-based auto-switching, audio-reactive cuts, take renaming, health monitor, dashboard. V3 (gated on 10 clean V2 sessions): Jetson vision node over MQTT, Sony Camera Remote SDK (PZ zoom moves), amaran OpenAPI lighting, Mission Control integration.

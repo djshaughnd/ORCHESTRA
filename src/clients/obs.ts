@@ -1,4 +1,4 @@
-import OBSWebSocket from 'obs-websocket-js';
+import OBSWebSocket, { EventSubscription } from 'obs-websocket-js';
 import type { Logger } from 'pino';
 
 export interface ObsRecordStatus {
@@ -68,7 +68,9 @@ export class ObsClient {
   private async tryConnect(): Promise<void> {
     if (this.stopped) return;
     try {
-      await this.obs.connect(this.url, this.password || undefined);
+      await this.obs.connect(this.url, this.password || undefined, {
+        eventSubscriptions: EventSubscription.All | EventSubscription.InputVolumeMeters,
+      });
       this.connected = true;
       this.backoffMs = 1_000;
       this.log.info({ url: this.url }, 'connected to OBS WebSocket');
@@ -147,5 +149,13 @@ export class ObsClient {
       timecode: res.outputTimecode,
       bytes: res.outputBytes,
     };
+  }
+
+  async getStats(): Promise<{ skipped: number; total: number }> {
+    const res = await this.call<{
+      outputSkippedFrames: number;
+      outputTotalFrames: number;
+    }>('GetStats');
+    return { skipped: res.outputSkippedFrames, total: res.outputTotalFrames };
   }
 }

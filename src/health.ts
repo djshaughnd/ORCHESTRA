@@ -18,6 +18,8 @@ export interface HealthDeps {
   diskFreeBytes: () => Promise<number>;
   /** Returns true if the NAS host answers; throws on failure. Null = NAS disabled. */
   nasReachable: (() => Promise<boolean>) | null;
+  /** OBS skipped/total output frames; throws if unreachable. Null = skip check. */
+  obsDroppedFrames?: (() => Promise<{ skipped: number; total: number }>) | null;
   minFreeGB: number;
   timeoutMs?: number;
 }
@@ -83,6 +85,24 @@ export async function runHealthChecks(deps: HealthDeps): Promise<HealthReport> {
         },
         timeoutMs,
         'nas',
+      ),
+    ]);
+  }
+
+  if (deps.obsDroppedFrames) {
+    entries.push([
+      'obsFrames',
+      runCheck(
+        async () => {
+          const { skipped, total } = await deps.obsDroppedFrames!();
+          const ratio = total > 0 ? skipped / total : 0;
+          return {
+            ok: ratio < 0.05,
+            detail: `${skipped}/${total} frames skipped (${(ratio * 100).toFixed(1)}%)`,
+          };
+        },
+        timeoutMs,
+        'obsFrames',
       ),
     ]);
   }

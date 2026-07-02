@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseConfig } from '../src/config.js';
+import { parseConfig, resolveProfile } from '../src/config.js';
 
 const valid = {
   recordingsRoot: '/tmp/recordings',
@@ -15,6 +15,8 @@ describe('config validation', () => {
     const cfg = parseConfig(valid);
     expect(cfg.http.port).toBe(8722);
     expect(cfg.nas.rsyncFlags).toContain('--checksum');
+    expect(cfg.atem.enabled).toBe(false);
+    expect(cfg.activeProfile).toBe('default');
   });
 
   it('expands ~ in recordingsRoot', () => {
@@ -38,5 +40,37 @@ describe('config validation', () => {
     expect(() =>
       parseConfig({ ...valid, nas: { enabled: true, host: '', remotePath: '' } }),
     ).toThrowError(/nas/);
+  });
+});
+
+describe('profiles (V2)', () => {
+  it('applies profile defaults', () => {
+    const cfg = parseConfig({ ...valid, activeProfile: 'podcast', profiles: { podcast: {} } });
+    const p = cfg.profiles.podcast!;
+    expect(p.autoSwitch.enabled).toBe(false);
+    expect(p.autoSwitch.minShotSeconds).toBe(4);
+    expect(p.fileTemplate).toBe('{date}_{profile}_take{take}');
+    expect(p.atemDefaultCam).toBe(1);
+  });
+
+  it('rejects an activeProfile that is not defined', () => {
+    expect(() => parseConfig({ ...valid, activeProfile: 'nope' })).toThrowError(
+      /activeProfile/,
+    );
+  });
+
+  it('rejects maxShotSeconds < minShotSeconds', () => {
+    expect(() =>
+      parseConfig({
+        ...valid,
+        profiles: { p: { autoSwitch: { minShotSeconds: 10, maxShotSeconds: 5 } } },
+      }),
+    ).toThrowError(/maxShotSeconds/);
+  });
+
+  it('resolveProfile falls back to defaults for "default"', () => {
+    const cfg = parseConfig(valid);
+    const p = resolveProfile(cfg, 'default');
+    expect(p.autoSwitch.cameras).toEqual([1, 2]);
   });
 });

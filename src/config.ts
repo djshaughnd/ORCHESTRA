@@ -4,6 +4,53 @@ import { resolve } from 'node:path';
 import { parse } from 'yaml';
 import { z } from 'zod';
 
+// ---------------------------------------------------------------------------
+// Profiles (V2): each profile defines templates, default cam, switching rules
+// ---------------------------------------------------------------------------
+
+export const AudioRuleSchema = z.object({
+  enabled: z.boolean().default(false),
+  // OBS input name whose volume meters drive the closeup rule.
+  obsInput: z.string().default('Mic/Aux'),
+  closeupCam: z.number().int().positive().default(2),
+  thresholdDb: z.number().default(-30),
+  sustainMs: z.number().int().positive().default(1500),
+});
+
+export const AutoSwitchSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    cameras: z.array(z.number().int().positive()).min(1).default([1, 2]),
+    minShotSeconds: z.number().positive().default(4),
+    maxShotSeconds: z.number().positive().default(12),
+    overridePauseSeconds: z.number().nonnegative().default(20),
+    audio: AudioRuleSchema.default({}),
+  })
+  .refine((a) => a.maxShotSeconds >= a.minShotSeconds, {
+    message: 'maxShotSeconds must be >= minShotSeconds',
+    path: ['maxShotSeconds'],
+  });
+
+export const ProfileSchema = z.object({
+  // Overrides session.nameTemplate when set.
+  nameTemplate: z.string().optional(),
+  // Recording files are renamed to this on RecordStopped. {take} increments.
+  fileTemplate: z.string().default('{date}_{profile}_take{take}'),
+  obsSceneCollection: z.string().optional(),
+  atemDefaultCam: z.number().int().positive().default(1),
+  lightingPreset: z.string().optional(),
+  autoSwitch: AutoSwitchSchema.default({}),
+});
+
+export type ProfileConfig = z.infer<typeof ProfileSchema>;
+export type AutoSwitchConfig = z.infer<typeof AutoSwitchSchema>;
+
+export const DEFAULT_PROFILE: ProfileConfig = ProfileSchema.parse({});
+
+// ---------------------------------------------------------------------------
+// Root config
+// ---------------------------------------------------------------------------
+
 export const ConfigSchema = z.object({
   recordingsRoot: z.string().min(1),
   nas: z.object({
@@ -18,6 +65,8 @@ export const ConfigSchema = z.object({
   }),
   atem: z.object({
     ip: z.string().min(1),
+    // false = Companion drives the ATEM; daemon /cut and auto-switch disabled.
+    enabled: z.boolean().default(false),
   }),
   health: z.object({
     minFreeGB: z.number().positive().default(50),
@@ -25,6 +74,8 @@ export const ConfigSchema = z.object({
   session: z.object({
     nameTemplate: z.string().default('{date}_{time}_{slug}'),
   }),
+  activeProfile: z.string().default('default'),
+  profiles: z.record(ProfileSchema).default({}),
   http: z
     .object({
       port: z.number().int().positive().default(8722),
@@ -42,6 +93,11 @@ export function expandPath(p: string): string {
   return resolve(p);
 }
 
+/** Look up a profile by name; 'default' (or unknown) falls back to defaults. */
+export function resolveProfile(cfg: Config, name: string): ProfileConfig {
+  return cfg.profiles[name] ?? DEFAULT_PROFILE;
+}
+
 export function parseConfig(raw: unknown): Config {
   const result = ConfigSchema.safeParse(raw);
   if (!result.success) {
@@ -56,6 +112,11 @@ export function parseConfig(raw: unknown): Config {
   if (cfg.nas.enabled && (!cfg.nas.host || !cfg.nas.remotePath)) {
     throw new Error(
       'Invalid studio.yaml config: nas.enabled is true but nas.host / nas.remotePath are empty.',
+    );
+  }
+  if (cfg.activeProfile !== 'default' && !cfg.profiles[cfg.activeProfile]) {
+    throw new Error(
+      `Invalid studio.yaml config: activeProfile "${cfg.activeProfile}" is not defined under profiles.`,
     );
   }
   return { ...cfg, recordingsRoot: expandPath(cfg.recordingsRoot) };
