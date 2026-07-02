@@ -1,0 +1,21 @@
+{
+  "defaultMode": "acceptEdits",
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run dev)",
+      "Bash(npm start)",
+      "Bash(npm install)",
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(curl http://127.0.0.1:8722/*)",
+      "Bash(curl -X POST http://127.0.0.1:8722/*)"
+    ]
+  }
+}
