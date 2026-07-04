@@ -10,12 +10,16 @@ Working today: session lifecycle (`/session/start|mark|end`), record control, he
 
 **Real-hardware checks PASSED (2026-07-02):** ATEM confirmed as **ATEM Mini Pro ISO** at 192.168.1.99 (MAC 7c:2e:0d:1f:31:3f — needs a DHCP reservation), studio.yaml updated with `atem.enabled: true`. Daemon `POST /cut/2` smoke test verified against live ATEM state. Auto-switch dry run on the podcast profile: rotation cuts within 5–15s bounds, never repeated current cam, kill switch disarmed instantly. OBS 32.1.2 connected (note: OBS WebSocket auth appears OFF — config password is still CHANGE_ME and it connects anyway).
 
+**Manual test plan steps 1–7 + 10 PASSED against real OBS 32.1.2 (2026-07-04).** Session lifecycle, 409 on double start, record + take auto-rename (take1/take2), marker math (5017ms at ~5s), manifest, crash safety (daemon killed mid-take → OBS kept recording) all verified live. It shook out one real bug — duplicate/stale file entries in session.json after take rename — fixed in 089d41a (see noteFileRenamed in session.ts). Disk was cleared to ~72 GB free; health fully green.
+
+Chapter markers: OBS currently records **MKV**, so CreateRecordChapter is rejected (warn logged, marker still succeeds). To get real in-file chapters, switch OBS output format to **Hybrid MP4** (Settings → Output → Recording). Note recording bitrate observed ~12 MB/s (~42 GB/hr) — budget disk accordingly.
+
 ## Immediate next steps (before ANY new features)
 
-1. **Recordings disk has ~14.5 GB free (min 50)** — health check is red; clear space before a real session.
-2. Walk the user through the remaining manual test plan in README.md (record/rename/markers/end — steps 4–7, 10) — fix whatever it shakes out.
-3. Help the user wire Companion buttons (curl commands in README).
-4. NAS: still `enabled: false` — set up SSH key auth to the UGREEN NAS and test sync (step 11).
+1. Wire Companion buttons (curl commands in README; see also the Companion wiring guide added in 84c8c58).
+2. Auto-switch step 9 partial: rotation + kill switch verified live 2026-07-02; manual-override pause + audio-closeup rule not yet exercised against hardware (ATEM was powered off on 2026-07-04).
+3. NAS: still `enabled: false` — set up SSH key auth to the UGREEN NAS and test sync (step 11).
+4. Consider switching OBS to Hybrid MP4 for chapter-marker support (see above).
 
 ## Known gaps / small tickets (V2 polish)
 
