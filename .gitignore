@@ -4,3 +4,6 @@ logs/
 config/studio.yaml
 *.log
 .DS_Store
+
+# dev-session scratch
+.orch-dev/
