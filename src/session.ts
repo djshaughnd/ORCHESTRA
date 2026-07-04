@@ -129,6 +129,23 @@ export class SessionManager {
     }
   }
 
+  /**
+   * Record that a finished take was renamed on disk. Replaces the stale
+   * pre-rename entry (noted by stopRecord) so the manifest never lists a
+   * path that no longer exists; falls back to noting the file fresh when
+   * the recording was stopped from the OBS UI and never noted.
+   */
+  noteFileRenamed(from: string, to: string): void {
+    if (!this.active) return;
+    const i = this.active.files.indexOf(from);
+    if (i >= 0) {
+      this.active.files[i] = to;
+      this.log.info({ sessionId: this.active.id, from, to }, 'recording file entry updated');
+    } else {
+      this.noteOutputFile(to);
+    }
+  }
+
   /** Increment and return the take counter (used for file renaming). */
   nextTakeNumber(): number {
     if (!this.active) return 0;

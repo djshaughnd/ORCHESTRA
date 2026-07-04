@@ -91,7 +91,7 @@ async function main(): Promise<void> {
             );
           }
         }
-        sessions.noteOutputFile(finalPath);
+        sessions.noteFileRenamed(data.outputPath, finalPath);
       }
     },
   );

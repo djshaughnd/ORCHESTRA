@@ -102,6 +102,28 @@ describe('SessionManager state machine', () => {
     expect(mgr.activeSession).toBeNull();
   });
 
+  it('noteFileRenamed replaces the stale pre-rename path in the manifest', async () => {
+    const obs = mockObs({ getRecordStatus: vi.fn(async () => ({ active: false })) });
+    const mgr = new SessionManager(root, tpl('{slug}'), obs, vi.fn(), log);
+    await mgr.start('ep3');
+    // API stop notes the original OBS path…
+    await mgr.stopRecord();
+    // …then the RecordStateChanged handler renames the take on disk.
+    mgr.noteFileRenamed('/tmp/out.mkv', '/tmp/ep3_take1.mkv');
+    const manifest = await mgr.end();
+    expect(manifest.files).toEqual(['/tmp/ep3_take1.mkv']); // no stale duplicate
+  });
+
+  it('noteFileRenamed notes the file fresh when stopped from the OBS UI', async () => {
+    const obs = mockObs({ getRecordStatus: vi.fn(async () => ({ active: false })) });
+    const mgr = new SessionManager(root, tpl('{slug}'), obs, vi.fn(), log);
+    await mgr.start('ep4');
+    // No API stop — recording was stopped in OBS; only the event fires.
+    mgr.noteFileRenamed('/tmp/out.mkv', '/tmp/ep4_take1.mkv');
+    const manifest = await mgr.end();
+    expect(manifest.files).toEqual(['/tmp/ep4_take1.mkv']);
+  });
+
   it('stopRecord always attempts and never throws', async () => {
     const obs = mockObs({
       stopRecord: vi.fn(async () => {
