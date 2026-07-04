@@ -119,7 +119,7 @@ Requires `atem.enabled: true` (daemon connects to the ATEM over Ethernet via `at
 - OBS client auto-reconnects with exponential backoff (1s → 30s cap) and re-queries record state on reconnect. Commands fail fast when OBS is down — HTTP requests never hang.
 - `session/end` is crash-safe: `session.json` is written **before** NAS sync starts. Sync failures retry ×3 and never block the response.
 - SIGTERM never stops an active recording — OBS outlives the daemon by design.
-- Recording is **local SSD only**; sync to NAS happens post-session via rsync `--checksum`.
+- Recording is **local SSD only**; sync to NAS happens post-session via rsync `--checksum`. An external SSD under `/Volumes/...` counts as local — the daemon refuses to boot or start a session while that volume is unmounted (macOS would otherwise silently record to the boot disk), and `/health` goes red if it unmounts mid-session.
 - Health monitor runs every 30s while a session is armed; failures fire a macOS notification and (when enabled) a Companion variable push (transitions only, no spam). Companion being down never affects the studio — pushes are fire-and-forget with a 2s timeout.
 - Every device command is logged with a `sessionId` correlation field.
 

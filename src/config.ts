@@ -97,6 +97,16 @@ export const ConfigSchema = z.object({
 
 export type Config = z.infer<typeof ConfigSchema>;
 
+/**
+ * '/Volumes/T9-Content/foo' -> '/Volumes/T9-Content'. Null for paths not on
+ * an external volume. Used to guard against recording to an unmounted-drive
+ * mountpoint folder (macOS would silently create it on the boot disk).
+ */
+export function volumeRootOf(p: string): string | null {
+  const m = /^\/Volumes\/[^/]+/.exec(p);
+  return m ? m[0] : null;
+}
+
 /** Expand a leading ~ to the user's home directory. */
 export function expandPath(p: string): string {
   if (p === '~') return homedir();

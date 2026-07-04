@@ -52,6 +52,31 @@ describe('health aggregation', () => {
     expect(report.checks.obs?.detail).toContain('not connected');
   });
 
+  it('fails overall when the recording volume is unmounted', async () => {
+    const report = await runHealthChecks({
+      obsVersion: async () => '30.2.3',
+      diskFreeBytes: async () => 100 * GB,
+      nasReachable: null,
+      volumeMounted: async () => false,
+      minFreeGB: 50,
+    });
+    expect(report.ok).toBe(false);
+    expect(report.checks.recordingVolume?.ok).toBe(false);
+    expect(report.checks.recordingVolume?.detail).toContain('NOT MOUNTED');
+  });
+
+  it('skips the volume check for internal-disk recording roots', async () => {
+    const report = await runHealthChecks({
+      obsVersion: async () => '30.2.3',
+      diskFreeBytes: async () => 100 * GB,
+      nasReachable: null,
+      volumeMounted: null,
+      minFreeGB: 50,
+    });
+    expect(report.checks.recordingVolume).toBeUndefined();
+    expect(report.ok).toBe(true);
+  });
+
   it('enforces per-check timeout', async () => {
     const report = await runHealthChecks({
       obsVersion: () => new Promise(() => {}), // hangs forever

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseConfig, resolveProfile } from '../src/config.js';
+import { parseConfig, resolveProfile, volumeRootOf } from '../src/config.js';
 
 const valid = {
   recordingsRoot: '/tmp/recordings',
@@ -43,6 +43,18 @@ describe('config validation', () => {
     expect(() =>
       parseConfig({ ...valid, nas: { enabled: true, host: '', remotePath: '' } }),
     ).toThrowError(/nas/);
+  });
+});
+
+describe('volumeRootOf', () => {
+  it('extracts the volume root from an external path', () => {
+    expect(volumeRootOf('/Volumes/T9-Content/RECORDING_SESSIONS')).toBe('/Volumes/T9-Content');
+    expect(volumeRootOf('/Volumes/T9-Content')).toBe('/Volumes/T9-Content');
+  });
+
+  it('returns null for internal-disk paths', () => {
+    expect(volumeRootOf('/Users/x/Recordings')).toBeNull();
+    expect(volumeRootOf('/Volumes')).toBeNull();
   });
 });
 

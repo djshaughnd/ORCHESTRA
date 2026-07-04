@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
-import { resolveProfile, type Config } from './config.js';
+import { resolveProfile, volumeRootOf, type Config } from './config.js';
+import { isVolumeMounted } from './health.js';
 import { DASHBOARD_HTML } from './dashboard.js';
 import type { HealthReport } from './health.js';
 import type { HealthMonitor } from './monitor.js';
@@ -48,6 +49,15 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
       const profileName = body.profile ?? state.activeProfile;
       if (profileName !== 'default' && !cfg.profiles[profileName]) {
         return reply.code(400).send({ error: `Unknown profile "${profileName}"` });
+      }
+
+      // Never start a session onto an unplugged external drive — mkdir would
+      // silently land on the boot disk at the volume's mountpoint path.
+      const recordingVolume = volumeRootOf(cfg.recordingsRoot);
+      if (recordingVolume && !(await isVolumeMounted(recordingVolume))) {
+        return reply.code(503).send({
+          error: `Recording volume ${recordingVolume} is not mounted — plug in the drive`,
+        });
       }
       const profile = resolveProfile(cfg, profileName);
 

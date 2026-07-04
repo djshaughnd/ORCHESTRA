@@ -1,5 +1,5 @@
 import { exec } from 'node:child_process';
-import { statfs } from 'node:fs/promises';
+import { stat, statfs } from 'node:fs/promises';
 
 export interface CheckResult {
   ok: boolean;
@@ -20,6 +20,8 @@ export interface HealthDeps {
   nasReachable: (() => Promise<boolean>) | null;
   /** OBS skipped/total output frames; throws if unreachable. Null = skip check. */
   obsDroppedFrames?: (() => Promise<{ skipped: number; total: number }>) | null;
+  /** True if the external recording volume is mounted. Null = internal disk, skip. */
+  volumeMounted?: (() => Promise<boolean>) | null;
   minFreeGB: number;
   timeoutMs?: number;
 }
@@ -89,6 +91,25 @@ export async function runHealthChecks(deps: HealthDeps): Promise<HealthReport> {
     ]);
   }
 
+  if (deps.volumeMounted) {
+    entries.push([
+      'recordingVolume',
+      runCheck(
+        async () => {
+          const mounted = await deps.volumeMounted!();
+          return {
+            ok: mounted,
+            detail: mounted
+              ? 'recording volume mounted'
+              : 'RECORDING VOLUME NOT MOUNTED — plug the drive back in',
+          };
+        },
+        timeoutMs,
+        'recordingVolume',
+      ),
+    ]);
+  }
+
   if (deps.obsDroppedFrames) {
     entries.push([
       'obsFrames',
@@ -120,6 +141,20 @@ export async function runHealthChecks(deps: HealthDeps): Promise<HealthReport> {
 export async function diskFreeBytesAt(path: string): Promise<number> {
   const s = await statfs(path);
   return s.bavail * s.bsize;
+}
+
+/**
+ * True when volumeRoot (e.g. /Volumes/T9-Content) is a real mountpoint.
+ * A plain folder accidentally created on the boot disk shares the boot
+ * disk's device id; a mounted volume has its own.
+ */
+export async function isVolumeMounted(volumeRoot: string): Promise<boolean> {
+  try {
+    const [vol, root] = await Promise.all([stat(volumeRoot), stat('/')]);
+    return vol.dev !== root.dev;
+  } catch {
+    return false; // path missing = not mounted
+  }
 }
 
 export function pingHost(host: string): Promise<boolean> {

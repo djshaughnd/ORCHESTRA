@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, resolveProfile, type Config } from './config.js';
+import { loadConfig, resolveProfile, volumeRootOf, type Config } from './config.js';
 import { createLogger } from './log.js';
 import { ObsClient } from './clients/obs.js';
 import { createAtemClient } from './clients/atem.js';
@@ -9,7 +9,7 @@ import { CompanionClient } from './clients/companion.js';
 import { namePartsForNow, SessionManager } from './session.js';
 import { startNasSync } from './jobs/sync.js';
 import { buildServer, type StudioState } from './http.js';
-import { diskFreeBytesAt, pingHost, runHealthChecks } from './health.js';
+import { diskFreeBytesAt, isVolumeMounted, pingHost, runHealthChecks } from './health.js';
 import { HealthMonitor } from './monitor.js';
 import { buildTakeFilename } from './rename.js';
 import { Director, mulToDb } from './switcher.js';
@@ -24,6 +24,16 @@ async function main(): Promise<void> {
     cfg = loadConfig(configPath);
   } catch (err) {
     console.error(`\n[orchestra] BOOT FAILED\n${(err as Error).message}\n`);
+    process.exit(1);
+  }
+
+  // Recording to an external volume: refuse to boot when it isn't mounted,
+  // otherwise mkdir would silently create the folder on the boot disk.
+  const recordingVolume = volumeRootOf(cfg.recordingsRoot);
+  if (recordingVolume && !(await isVolumeMounted(recordingVolume))) {
+    console.error(
+      `\n[orchestra] BOOT FAILED\nrecordingsRoot ${cfg.recordingsRoot} is on ${recordingVolume}, but that volume is not mounted. Plug in the drive and restart.\n`,
+    );
     process.exit(1);
   }
 
@@ -138,6 +148,7 @@ async function main(): Promise<void> {
       diskFreeBytes: () => diskFreeBytesAt(cfg.recordingsRoot),
       nasReachable: cfg.nas.enabled ? () => pingHost(cfg.nas.host) : null,
       obsDroppedFrames: () => obs.getStats(),
+      volumeMounted: recordingVolume ? () => isVolumeMounted(recordingVolume) : null,
       minFreeGB: cfg.health.minFreeGB,
     });
   const monitor = new HealthMonitor(runChecks, log.child({ mod: 'monitor' }), {

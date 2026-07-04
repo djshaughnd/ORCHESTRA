@@ -4,6 +4,9 @@
 
 # Where sessions are recorded. LOCAL SSD ONLY — never a network path.
 # Finished sessions are rsynced to the NAS after the fact.
+# An external drive under /Volumes/... is fine (it's local): the daemon
+# refuses to boot or start a session when that volume is not mounted, and
+# /health goes red if it unmounts mid-session.
 recordingsRoot: "~/Recordings"
 
 nas:

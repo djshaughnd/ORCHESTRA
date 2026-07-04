@@ -45,6 +45,10 @@ In order, from the original build plan (docs: studio-director-build-plan.md in t
 - **OBS source snapshot**: `~/Downloads/obs-studio-master/` (GitHub ZIP of master). CAVEAT: `plugins/obs-websocket` is a git submodule and is EMPTY in a ZIP download — for websocket protocol details use https://github.com/obsproject/obs-websocket/blob/master/docs/generated/protocol.md instead. The snapshot is still useful for frontend/libobs internals; verified there that `obs_frontend_recording_add_chapter` returns false when not recording OR when paused (so chapter markers silently fail during a paused recording — our /session/mark logs a warn and the JSON marker still succeeds).
 - OBS developer guide: https://obsproject.com/kb/developer-guide
 
+## Storage workflow (decided 2026-07-04)
+
+Record to the **Samsung T9** (`/Volumes/T9-Content/RECORDING_SESSIONS`, exFAT) as the short-term working drive → cull/edit from there → export FINALS to the UGREEN NAS by hand. `nas.enabled` stays **false** on purpose: auto-sync would ship every raw take. NAS is at **192.168.1.225** (not the .50 placeholder); its SMB shares are usually mounted (e.g. `/Volumes/06_VIDEO_PROJECTS`), so export = drag/rsync. The daemon guards the T9: boot and `/session/start` refuse when the volume is unmounted (`volumeRootOf` + `isVolumeMounted`), and `/health` has a `recordingVolume` check. WATCH: T9 was 92% full (~327 GB free ≈ 7.7 h at observed bitrate) — cull aggressively or clear space.
+
 ## Context the code can't tell you
 
 - The user (Shaughn) runs DICHEEKO Studio; this ties into a broader "Mission Control / Brain Router" architecture later — `orchestra` should stay a clean standalone service it can talk to.
