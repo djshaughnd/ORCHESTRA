@@ -16,10 +16,11 @@ Chapter markers: OBS currently records **MKV**, so CreateRecordChapter is reject
 
 ## Immediate next steps (before ANY new features)
 
-1. Wire Companion buttons (curl commands in README; see also the Companion wiring guide added in 84c8c58).
-2. Auto-switch step 9 partial: rotation + kill switch verified live 2026-07-02; manual-override pause + audio-closeup rule not yet exercised against hardware (ATEM was powered off on 2026-07-04).
-3. NAS: still `enabled: false` — set up SSH key auth to the UGREEN NAS and test sync (step 11).
-4. Consider switching OBS to Hybrid MP4 for chapter-marker support (see above).
+1. Wire Companion buttons (curl commands in README; see also the Companion wiring guide added in 84c8c58). Needs the user at the Stream Deck.
+2. Auto-switch step 9 partial: rotation + kill switch verified live 2026-07-02; manual-override pause + audio-closeup rule not yet exercised against hardware (ATEM was powered off on 2026-07-04). Needs OBS open + ATEM powered on.
+3. ~~NAS: set up SSH key auth, test sync~~ SUPERSEDED (2026-07-04): storage workflow is now T9 (record/cull) → manual export to NAS. `nas.enabled` stays `false` on purpose — step 11 of the manual test plan (auto-rsync) does not apply to this workflow and should be skipped, not fixed.
+4. Consider switching OBS to Hybrid MP4 for chapter-marker support (see above). Needs OBS open — one settings toggle.
+5. Log the first real recorded session — 0 of the 10 required for the V3 gate so far (hardware validation + smoke tests don't count as "sessions").
 
 ## Known gaps / small tickets (V2 polish)
 
