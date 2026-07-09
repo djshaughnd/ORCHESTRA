@@ -45,7 +45,15 @@ async function poll() {
     html += s.record.active
       ? tile('rec', 'REC', '● ' + (s.record.timecode || '').split('.')[0], 'recording')
       : tile('', 'REC', 'stopped', '');
-    html += tile(s.auto && s.auto.armed ? 'ok' : '', 'Auto-switch', s.auto && s.auto.armed ? 'ARMED cam ' + s.auto.program : 'off', 'profile: ' + s.profile);
+    html += tile(s.auto && s.auto.armed ? 'ok' : '', 'Auto-switch', s.auto && s.auto.armed ? (s.auto.mode === 'sequence' ? 'SEQUENCE cam ' + s.auto.program : 'ARMED cam ' + s.auto.program) : 'off', 'profile: ' + s.profile);
+    if (s.capture) {
+      html += tile(
+        s.capture.frozen ? 'bad' : (s.capture.watching ? 'ok' : ''),
+        'Capture feed',
+        s.capture.frozen ? '⚠ FROZEN' : (s.capture.watching ? '● live' : 'idle'),
+        s.capture.watching ? 'watchdog on the recording feed' : 'watchdog arms with recording'
+      );
+    }
     for (const name in h.checks) {
       const c = h.checks[name];
       html += tile(c.ok ? 'ok' : 'bad', name, c.ok ? 'OK' : 'FAIL', c.detail);
