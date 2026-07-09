@@ -46,4 +46,9 @@ export class CompanionClient {
   pushHealth(ok: boolean): void {
     this.setVariable('orchestra_health', ok ? 'ok' : 'fail');
   }
+
+  /** orchestra_capture = "ok" | "frozen" — wired to capture watchdog transitions. */
+  pushCapture(ok: boolean): void {
+    this.setVariable('orchestra_capture', ok ? 'ok' : 'frozen');
+  }
 }

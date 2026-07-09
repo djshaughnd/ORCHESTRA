@@ -77,6 +77,23 @@ export const ConfigSchema = z.object({
     // Fire an OBS chapter marker on /session/mark (OBS 30.2+, Hybrid MP4 only).
     // Best-effort: failures are logged, the marker itself always succeeds.
     chapterMarkers: z.boolean().default(true),
+    // OBS source name that captures the program feed (e.g. the ATEM webcam
+    // capture). Required by the capture watchdog; null leaves it disabled.
+    captureSource: z.string().nullable().default(null),
+    // Capture watchdog (V2.5): while recording, poll captureSource for a
+    // frozen/dropped feed (the flaky Blackmagic UVC bug) and alert instantly.
+    captureWatchdog: z
+      .object({
+        enabled: z.boolean().default(false),
+        pollMs: z.number().int().positive().default(1000),
+        // Frames identical (or unreadable) for this long => frozen. Keep this
+        // comfortably above any legitimately-static moment on camera.
+        freezeSeconds: z.number().positive().default(4),
+        // Best-effort: on freeze, re-apply the source's own settings to nudge
+        // the capture driver to re-init. Default off — the alert is the point.
+        autoRecover: z.boolean().default(false),
+      })
+      .default({}),
   }),
   companion: z
     .object({

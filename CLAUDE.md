@@ -22,6 +22,7 @@ Node 20+, TypeScript strict ESM (NodeNext), Fastify, obs-websocket-js (v5), atem
 - `src/clients/obs.ts` — OBS WS wrapper: auto-reconnect w/ backoff, fail-fast when down.
 - `src/clients/atem.ts` — AtemClient interface; stub when atem.enabled=false.
 - `src/switcher.ts` — AutoSwitchEngine (random rotation, pure, tick(nowMs)-driven, injectable RNG) + CueSequenceEngine (scripted cinematic cue lists, same tick-driven shape) + Director (owns ticker/lifecycle, holds whichever engine is active — mutually exclusive).
+- `src/capture-watchdog.ts` — FreezeDetector (pure, hash-in/verdict-out) + CaptureWatchdog (owns ticker; polls OBS capture source while recording, alerts on frozen/dropped feed).
 - `src/monitor.ts`, `src/health.ts`, `src/rename.ts`, `src/jobs/sync.ts` — self-explanatory.
 
 ## Hard rules (do not violate)

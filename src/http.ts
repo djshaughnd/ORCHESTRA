@@ -9,6 +9,7 @@ import { ConflictError, type SessionManager } from './session.js';
 import type { Director } from './switcher.js';
 import type { AtemClient } from './clients/atem.js';
 import type { ObsClient } from './clients/obs.js';
+import type { CaptureWatchdog } from './capture-watchdog.js';
 
 export interface StudioState {
   activeProfile: string;
@@ -21,6 +22,7 @@ export interface HttpDeps {
   atem: AtemClient;
   director: Director;
   monitor: HealthMonitor;
+  captureWatchdog: CaptureWatchdog | null;
   state: StudioState;
   runChecks: () => Promise<HealthReport>;
   log: Logger;
@@ -28,7 +30,8 @@ export interface HttpDeps {
 }
 
 export function buildServer(deps: HttpDeps): FastifyInstance {
-  const { cfg, sessions, obs, atem, director, monitor, state, runChecks, log } = deps;
+  const { cfg, sessions, obs, atem, director, monitor, captureWatchdog, state, runChecks, log } =
+    deps;
   const app = Fastify({ logger: false });
 
   app.setErrorHandler((err, _req, reply) => {
@@ -42,46 +45,112 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
 
   // -------------------------------------------------------------- sessions
 
+  type OpenResult =
+    | { ok: true; sessionId: string; path: string }
+    | { ok: false; code: number; error: string };
+
+  /**
+   * Shared session-open flow used by /session/start and /go: validate the
+   * profile, guard the recording volume, switch OBS scene collection, then
+   * start the session + health monitor. Throws ConflictError on double-start
+   * (handled by the global error handler as a 409).
+   */
+  async function openSession(body: { name?: string; profile?: string }): Promise<OpenResult> {
+    const profileName = body.profile ?? state.activeProfile;
+    if (profileName !== 'default' && !cfg.profiles[profileName]) {
+      return { ok: false, code: 400, error: `Unknown profile "${profileName}"` };
+    }
+
+    // Never start a session onto an unplugged external drive — mkdir would
+    // silently land on the boot disk at the volume's mountpoint path.
+    const recordingVolume = volumeRootOf(cfg.recordingsRoot);
+    if (recordingVolume && !(await isVolumeMounted(recordingVolume))) {
+      return {
+        ok: false,
+        code: 503,
+        error: `Recording volume ${recordingVolume} is not mounted — plug in the drive`,
+      };
+    }
+    const profile = resolveProfile(cfg, profileName);
+
+    // Best-effort: switch OBS scene collection per profile before pointing
+    // the record directory (collection switches can reset output settings).
+    if (profile.obsSceneCollection && obs.isConnected) {
+      try {
+        await obs.call('SetCurrentSceneCollection', {
+          sceneCollectionName: profile.obsSceneCollection,
+        });
+      } catch (err) {
+        log.warn(
+          { err: (err as Error).message, collection: profile.obsSceneCollection },
+          'could not switch OBS scene collection',
+        );
+      }
+    }
+
+    const result = await sessions.start(body.name, profileName);
+    monitor.start();
+    return { ok: true, ...result };
+  }
+
   app.post<{ Body: { name?: string; profile?: string } | null }>(
     '/session/start',
     async (req, reply) => {
-      const body = req.body ?? {};
-      const profileName = body.profile ?? state.activeProfile;
-      if (profileName !== 'default' && !cfg.profiles[profileName]) {
-        return reply.code(400).send({ error: `Unknown profile "${profileName}"` });
-      }
-
-      // Never start a session onto an unplugged external drive — mkdir would
-      // silently land on the boot disk at the volume's mountpoint path.
-      const recordingVolume = volumeRootOf(cfg.recordingsRoot);
-      if (recordingVolume && !(await isVolumeMounted(recordingVolume))) {
-        return reply.code(503).send({
-          error: `Recording volume ${recordingVolume} is not mounted — plug in the drive`,
-        });
-      }
-      const profile = resolveProfile(cfg, profileName);
-
-      // Best-effort: switch OBS scene collection per profile before pointing
-      // the record directory (collection switches can reset output settings).
-      if (profile.obsSceneCollection && obs.isConnected) {
-        try {
-          await obs.call('SetCurrentSceneCollection', {
-            sceneCollectionName: profile.obsSceneCollection,
-          });
-        } catch (err) {
-          log.warn(
-            { err: (err as Error).message, collection: profile.obsSceneCollection },
-            'could not switch OBS scene collection',
-          );
-        }
-      }
-
-      const result = await sessions.start(body.name, profileName);
-      monitor.start();
-      log.info({ sessionId: result.sessionId, cmd: 'session/start' }, 'command ok');
-      return result;
+      const r = await openSession(req.body ?? {});
+      if (!r.ok) return reply.code(r.code).send({ error: r.error });
+      log.info({ sessionId: r.sessionId, cmd: 'session/start' }, 'command ok');
+      return { sessionId: r.sessionId, path: r.path };
     },
   );
+
+  // One-button macro: open session -> start recording -> (optional) run a
+  // scripted cinematic sequence. The "walk in, hit one button" path.
+  app.post<{
+    Body: { name?: string; profile?: string; sequence?: string; record?: boolean } | null;
+  }>('/go', async (req, reply) => {
+    const body = req.body ?? {};
+    const profileName = body.profile ?? state.activeProfile;
+    const profile = resolveProfile(cfg, profileName);
+    const seqName = body.sequence;
+
+    // Validate the sequence up-front so /go is all-or-nothing on bad input.
+    if (seqName) {
+      if (!cfg.atem.enabled) {
+        return reply
+          .code(400)
+          .send({ error: 'atem.enabled=false in studio.yaml — cannot run a sequence' });
+      }
+      if (!profile.sequences[seqName]) {
+        return reply
+          .code(404)
+          .send({ error: `Unknown sequence "${seqName}" for profile "${profileName}"` });
+      }
+    }
+
+    const r = await openSession(body);
+    if (!r.ok) return reply.code(r.code).send({ error: r.error });
+
+    const record = body.record !== false; // defaults to true
+    if (record) {
+      try {
+        await sessions.startRecord();
+      } catch (err) {
+        return reply.code(503).send({
+          ok: false,
+          sessionId: r.sessionId,
+          path: r.path,
+          error: `Session started but recording failed: ${(err as Error).message}`,
+        });
+      }
+    }
+    if (seqName) director.runSequence(profile.sequences[seqName]!);
+
+    log.info(
+      { sessionId: r.sessionId, sequence: seqName ?? null, record, cmd: 'go' },
+      'command ok',
+    );
+    return { ok: true, sessionId: r.sessionId, path: r.path, recording: record, ...director.status };
+  });
 
   app.post<{ Body: { label?: string } | null }>('/session/mark', async (req) => {
     const marker = sessions.mark(req.body?.label);
@@ -235,6 +304,9 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
       obsConnected: obs.isConnected,
       atemConnected: atem.isConnected,
       record,
+      capture: captureWatchdog
+        ? { watching: captureWatchdog.isRunning, frozen: captureWatchdog.isFrozen }
+        : null,
       uptimeSeconds: Math.floor((Date.now() - deps.startedAt.getTime()) / 1000),
     };
   });

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import OBSWebSocket, { EventSubscription } from 'obs-websocket-js';
 import type { Logger } from 'pino';
 
@@ -154,6 +155,37 @@ export class ObsClient {
   /** OBS 30.2+ (obs-websocket 5.5): chapter marker in a Hybrid MP4 recording. */
   async createRecordChapter(name?: string): Promise<void> {
     await this.call('CreateRecordChapter', name ? { chapterName: name } : undefined);
+  }
+
+  /**
+   * Hash of a tiny screenshot of a source — used by the capture watchdog to
+   * detect a frozen/dropped feed (identical hash over time = frozen). Small
+   * size keeps it cheap; a live feed's sensor noise changes the hash every frame.
+   */
+  async getSourceFrameHash(sourceName: string): Promise<string> {
+    const res = await this.call<{ imageData: string }>('GetSourceScreenshot', {
+      sourceName,
+      imageFormat: 'jpg',
+      imageWidth: 64,
+      imageHeight: 36,
+      imageCompressionQuality: 40,
+    });
+    return createHash('sha1').update(res.imageData).digest('hex');
+  }
+
+  /**
+   * Re-apply a source's own current settings (overlay merge) — nudges a stalled
+   * capture driver to re-initialise. Best-effort watchdog recovery.
+   */
+  async reactivateInput(inputName: string): Promise<void> {
+    const res = await this.call<{ inputSettings: Record<string, unknown> }>('GetInputSettings', {
+      inputName,
+    });
+    await this.call('SetInputSettings', {
+      inputName,
+      inputSettings: res.inputSettings,
+      overlay: true,
+    });
   }
 
   async getStats(): Promise<{ skipped: number; total: number }> {

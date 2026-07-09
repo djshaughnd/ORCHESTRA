@@ -57,6 +57,7 @@ All JSON, on `http://127.0.0.1:8722`.
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
+| POST | `/go` | `{name?, profile?, sequence?, record?}` | **One-button macro.** Opens a session, starts recording (unless `record:false`), and runs the named cinematic `sequence` if given — all in one call. The "walk in, hit one button" path. |
 | POST | `/session/start` | `{name?, profile?}` | Creates dated session folder (profile template), switches OBS scene collection, points OBS record dir at it, starts the health monitor. 409 if a session is active. |
 | POST | `/session/mark` | `{label?}` | Timestamped marker. While recording, also drops an OBS chapter marker (30.2+ Hybrid MP4, best-effort). 409 if no session. |
 | POST | `/session/end` | — | Stops recording if running, writes `session.json`, fires NAS sync, stops monitor + auto-switch, returns manifest. |
@@ -123,6 +124,7 @@ Requires `atem.enabled: true` (daemon connects to the ATEM over Ethernet via `at
 - SIGTERM never stops an active recording — OBS outlives the daemon by design.
 - Recording is **local SSD only**; sync to NAS happens post-session via rsync `--checksum`. An external SSD under `/Volumes/...` counts as local — the daemon refuses to boot or start a session while that volume is unmounted (macOS would otherwise silently record to the boot disk), and `/health` goes red if it unmounts mid-session.
 - Health monitor runs every 30s while a session is armed; failures fire a macOS notification and (when enabled) a Companion variable push (transitions only, no spam). Companion being down never affects the studio — pushes are fire-and-forget with a 2s timeout.
+- **Capture watchdog** (when `obs.captureWatchdog.enabled` + `obs.captureSource` set): while recording, polls the OBS capture source for a frozen or dropped feed (the flaky Blackmagic USB capture) and fires an instant macOS notification + Companion `orchestra_capture` push, so an unattended recording can be trusted. Optional best-effort auto-recover. See [docs/cinematic-recording-plan.md](docs/cinematic-recording-plan.md).
 - Every device command is logged with a `sessionId` correlation field.
 
 ## Manual test plan (run with OBS open)

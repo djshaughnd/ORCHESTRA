@@ -56,6 +56,19 @@ New scripted (non-random) multi-cam mode, separate from `autoSwitch`'s rotation 
 - **Not yet done**: the live `studio.yaml` `dj` profile has no real `sequences` defined — `config/studio.example.yaml` has a fully-commented `mixingReel` example, but its `cam` numbers are PLACEHOLDERS. Confirm the ATEM's actual input-to-label mapping in ATEM Software Control (cables were labeled `CAM SLIDER` / `OVERHEAD` / `REAR SCREEN` + one unlabeled input in the photos) before copying real numbers into `studio.yaml`.
 - **Not yet done**: no macro endpoint ties `/session/start` + `/record/start` + `/sequence/:name/run` into one Stream Deck press yet — right now it's 3 curl calls. Natural next increment once the real cue numbers are confirmed.
 
+## Cinematic recording pipeline — BUILT + VERIFIED LIVE 2026-07-09
+
+Full plan in `docs/cinematic-recording-plan.md`. Goal: one Stream Deck button → hands-free multi-cam cinematic reel (Shaughn can't mix and switch at once).
+
+**Camera map CONFIRMED live** (cut each input via daemon, watched OBS): CAM1 = back-wall wide HERO, CAM2 = OVERHEAD (top-down decks). CAM3/CAM4 empty (slider + gimbal later). The `dj` profile's `mixingReel` sequence uses CAM1/CAM2.
+
+**Key hardware finding:** ATEM Mini Pro ISO's single USB-C is webcam-out-to-Mac **OR** record-to-SSD, never both (Blackmagic forum confirmed). It's on the Mac, and clean audio comes from the Apollo Twin mapped in OBS → **OBS is the recorder**, ATEM switching runs over Ethernet in parallel. ISO-to-SSD is NOT viable without freeing the USB-C (would strand Apollo audio). Phase-2 upgrade path: ATEM HDMI-out → Elgato Cam Link frees the USB-C for an SSD + gives a rock-solid feed.
+
+**Built this session (all verified live against real OBS + ATEM, 65/65 tests):**
+- **`POST /go`** one-button macro (`src/http.ts`): open session → start recording → run named sequence, one call. Verified: single call started session + record + watchdog + mixingReel together.
+- **Capture watchdog** (`src/capture-watchdog.ts`): while recording, polls the OBS capture source via `GetSourceScreenshot` frame-hashing; on a frozen/dropped feed (the flaky Blackmagic UVC bug we hit) fires instant macOS notification + Companion `orchestra_capture` push. Optional `autoRecover`. Verified: NO false-alarm on the live moving feed (frame hashes change every second), arms/disarms exactly with recording. Config: `obs.captureSource` + `obs.captureWatchdog` (live studio.yaml set to `"ATEM PROGRAM"`, enabled).
+- OBS reliability note: the Blackmagic UVC capture drops intermittently (device disappears from macOS). Fix = recreate the capture SOURCE (delete + re-add), not just re-pick the device; plus direct USB-C cable / no hub. This is the main remaining physical reliability task.
+
 ## Hardware SDK investigation — 2026-07-09 (Sony / DJI / amaran)
 
 Findings before writing any driver code, so the build doesn't chase dead ends:

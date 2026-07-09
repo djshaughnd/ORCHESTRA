@@ -6,6 +6,7 @@ import { createLogger } from './log.js';
 import { ObsClient } from './clients/obs.js';
 import { createAtemClient } from './clients/atem.js';
 import { CompanionClient } from './clients/companion.js';
+import { CaptureWatchdog } from './capture-watchdog.js';
 import { namePartsForNow, SessionManager } from './session.js';
 import { startNasSync } from './jobs/sync.js';
 import { buildServer, type StudioState } from './http.js';
@@ -55,6 +56,23 @@ async function main(): Promise<void> {
   );
   const director = new Director(atem, log.child({ mod: 'director' }));
 
+  // Capture watchdog: only meaningful when a source name is configured.
+  const cw = cfg.obs.captureWatchdog;
+  const captureWatchdog =
+    cw.enabled && cfg.obs.captureSource
+      ? new CaptureWatchdog({
+          grabFrame: () => obs.getSourceFrameHash(cfg.obs.captureSource!),
+          onFreeze: () => companion.pushCapture(false),
+          onRecover: () => companion.pushCapture(true),
+          pollMs: cw.pollMs,
+          freezeSeconds: cw.freezeSeconds,
+          log: log.child({ mod: 'capture-watchdog' }),
+          ...(cw.autoRecover
+            ? { recover: () => obs.reactivateInput(cfg.obs.captureSource!) }
+            : {}),
+        })
+      : null;
+
   const sessions = new SessionManager(
     cfg.recordingsRoot,
     (profile) => resolveProfile(cfg, profile).nameTemplate ?? cfg.session.nameTemplate,
@@ -72,6 +90,10 @@ async function main(): Promise<void> {
       log.info({ event: 'RecordStateChanged', ...data }, 'obs event');
       if (data.outputState === 'OBS_WEBSOCKET_OUTPUT_STARTED') {
         sessions.noteRecordingStarted();
+        captureWatchdog?.start();
+      }
+      if (data.outputState === 'OBS_WEBSOCKET_OUTPUT_STOPPED') {
+        captureWatchdog?.stop();
       }
       if (data.outputState === 'OBS_WEBSOCKET_OUTPUT_STOPPED' && data.outputPath) {
         let finalPath = data.outputPath;
@@ -165,6 +187,7 @@ async function main(): Promise<void> {
     atem,
     director,
     monitor,
+    captureWatchdog,
     state,
     runChecks,
     log: log.child({ mod: 'http' }),
@@ -178,6 +201,7 @@ async function main(): Promise<void> {
     log.warn({ signal }, 'shutdown requested');
     director.disarm();
     monitor.stop();
+    captureWatchdog?.stop();
     if (obs.isConnected) {
       try {
         const status = await obs.getRecordStatus();

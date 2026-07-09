@@ -26,6 +26,17 @@ obs:
   # /session/mark also drops an OBS chapter marker into the recording
   # (OBS 30.2+, Hybrid MP4 output only). Best-effort — safe to leave on.
   chapterMarkers: true
+  # OBS source name that captures the program feed (the ATEM USB webcam
+  # capture). Required by the capture watchdog below; null disables it.
+  captureSource: null            # e.g. "ATEM PROGRAM"
+  # Capture watchdog: while recording, watch captureSource for a frozen or
+  # dropped feed (the flaky Blackmagic USB capture) and alert instantly via
+  # macOS notification + Companion ($(internal:custom_orchestra_capture)).
+  captureWatchdog:
+    enabled: false
+    pollMs: 1000
+    freezeSeconds: 4             # frames unchanged/unreadable this long => frozen
+    autoRecover: false           # best-effort re-init of the source on freeze
 
 companion:
   # Push state to Companion custom variables so buttons flip color on failure
