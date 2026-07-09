@@ -73,6 +73,17 @@ Full plan in `docs/cinematic-recording-plan.md`. Goal: one Stream Deck button �
 - **Capture watchdog** (`src/capture-watchdog.ts`): while recording, polls the OBS capture source via `GetSourceScreenshot` frame-hashing; on a frozen/dropped feed (the flaky Blackmagic UVC bug we hit) fires instant macOS notification + Companion `orchestra_capture` push. Optional `autoRecover`. Verified: NO false-alarm on the live moving feed (frame hashes change every second), arms/disarms exactly with recording. Config: `obs.captureSource` + `obs.captureWatchdog` (live studio.yaml set to `"ATEM PROGRAM"`, enabled).
 - OBS reliability note: the Blackmagic UVC capture drops intermittently (device disappears from macOS). Fix = recreate the capture SOURCE (delete + re-add), not just re-pick the device; plus direct USB-C cable / no hub. This is the main remaining physical reliability task.
 
+## Beat-reactive cinematic director — BUILT 2026-07-09 (the "smart reel")
+
+`src/beat-director.ts` `BeatReactiveEngine` — fast, music-driven cutting for short-form mixing reels, off the OBS audio meters ORCHESTRA already receives (no new hardware, no ML). Two ideas combined:
+- **Energy-scaled pacing** (audio-reactive): slow envelope of the level → 0..1 energy; high energy (drop) → short shots (~minShotMs), low energy (breakdown) → long shots (~maxShotMs).
+- **Onset-synced cuts** (beat-aware): a sharp rise above the rolling baseline = a beat; once a shot has been held its target length, the cut waits for the next beat so it lands ON it. A grace timeout cuts anyway so quiet passages still move.
+- Camera choice weighted by energy: loud favours closeupCam (overhead/hands), quiet favours wideCam (hero).
+
+Wiring: `Director.armReactive()` (mode `'reactive'`), config `profile.beatReactive` (BeatReactiveSchema). Endpoints: `POST /reactive/arm`, or `POST /go {reactive:true}`; disarm via `/auto/disarm`. `/status` + dashboard expose live `energy`. **GO.app now triggers reactive** (`/go {profile:dj, reactive:true}`); REEL.app stays the scripted `mixingReel` fallback. Clock-free/RNG-injectable; 9 unit tests (beat-synced cut, energy pacing, refractory, grace timeout, manual-override pause, input filtering). 73 tests total.
+
+**Music source CONFIRMED**: OBS input `"Audio Input Capture"` = the Apollo Twin / UAD device (`com_uaudio_driver_UAD2AudioEngine:0`) — set as `beatReactive.obsInput` in the dj profile. Verified live: arms, tracks energy, timeout-fallback cuts in silence (energy 0 → 4s cuts). Beat-sync + energy pacing need real music playing to observe (unit-tested deterministically). **Tuning knobs** in studio.yaml dj `beatReactive`: minShotMs/maxShotMs (pace), onsetRiseDb (beat sensitivity), energyFloorDb/energyCeilDb (energy range). If cuts feel wrong once music plays, adjust these.
+
 ## Hardware SDK investigation — 2026-07-09 (Sony / DJI / amaran)
 
 Findings before writing any driver code, so the build doesn't chase dead ends:

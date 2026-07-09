@@ -31,6 +31,39 @@ export const AutoSwitchSchema = z
     path: ['maxShotSeconds'],
   });
 
+export const BeatReactiveSchema = z.object({
+  enabled: z.boolean().default(false),
+  cameras: z.array(z.number().int().positive()).min(1).default([1, 2]),
+  // Which cam reads as the "wide/hero" vs the "close/action" shot — used to
+  // bias camera choice by energy (loud favours close, quiet favours wide).
+  wideCam: z.number().int().positive().default(1),
+  closeupCam: z.number().int().positive().default(2),
+  // OBS input carrying the MUSIC (drives beats + energy). Set to whichever
+  // input has your DJ/track audio (e.g. the Apollo feed), not the mic.
+  obsInput: z.string().default('Mic/Aux'),
+  // Shot length bounds: at full energy shots are ~minShotMs (fast, short-form),
+  // at silence ~maxShotMs. Defaults tuned fast for reels.
+  minShotMs: z.number().int().positive().default(1200),
+  maxShotMs: z.number().int().positive().default(4000),
+  // A level rise this many dB above the rolling baseline counts as a beat.
+  onsetRiseDb: z.number().positive().default(6),
+  // Minimum gap between detected beats (debounce), and how long to wait past
+  // the target shot length for a beat before cutting anyway.
+  refractoryMs: z.number().int().positive().default(250),
+  beatGraceMs: z.number().int().nonnegative().default(400),
+  // Baseline-envelope smoothing (0..1); higher = snappier energy tracking.
+  envelopeAlpha: z.number().positive().max(1).default(0.05),
+  // dB range mapped to energy 0..1.
+  energyFloorDb: z.number().default(-45),
+  energyCeilDb: z.number().default(-12),
+  // Energy thresholds for the camera bias.
+  lowEnergy: z.number().min(0).max(1).default(0.3),
+  highEnergy: z.number().min(0).max(1).default(0.6),
+  overridePauseMs: z.number().int().nonnegative().default(6000),
+});
+
+export type BeatReactiveConfig = z.infer<typeof BeatReactiveSchema>;
+
 export const SequenceCueSchema = z.object({
   // ATEM input number — confirm against ATEM Software Control, not guessed.
   cam: z.number().int().positive(),
@@ -52,6 +85,9 @@ export const ProfileSchema = z.object({
   // Named scripted cinematic cue lists (POST /sequence/:name/run). Mutually
   // exclusive with autoSwitch's rotation — only one controller runs at a time.
   sequences: z.record(z.array(SequenceCueSchema)).default({}),
+  // Beat-reactive director: fast, music-driven cutting (POST /reactive/arm,
+  // or /go with reactive:true). Reads the OBS audio meters for beats + energy.
+  beatReactive: BeatReactiveSchema.default({}),
 });
 
 export type ProfileConfig = z.infer<typeof ProfileSchema>;

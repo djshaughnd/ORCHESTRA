@@ -106,25 +106,38 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
   // One-button macro: open session -> start recording -> (optional) run a
   // scripted cinematic sequence. The "walk in, hit one button" path.
   app.post<{
-    Body: { name?: string; profile?: string; sequence?: string; record?: boolean } | null;
+    Body: {
+      name?: string;
+      profile?: string;
+      sequence?: string;
+      reactive?: boolean;
+      record?: boolean;
+    } | null;
   }>('/go', async (req, reply) => {
     const body = req.body ?? {};
     const profileName = body.profile ?? state.activeProfile;
     const profile = resolveProfile(cfg, profileName);
     const seqName = body.sequence;
+    const reactive = body.reactive === true;
 
-    // Validate the sequence up-front so /go is all-or-nothing on bad input.
-    if (seqName) {
-      if (!cfg.atem.enabled) {
-        return reply
-          .code(400)
-          .send({ error: 'atem.enabled=false in studio.yaml — cannot run a sequence' });
-      }
-      if (!profile.sequences[seqName]) {
-        return reply
-          .code(404)
-          .send({ error: `Unknown sequence "${seqName}" for profile "${profileName}"` });
-      }
+    // Validate switching intent up-front so /go is all-or-nothing on bad input.
+    if (seqName && reactive) {
+      return reply.code(400).send({ error: 'Pass either sequence or reactive, not both' });
+    }
+    if ((seqName || reactive) && !cfg.atem.enabled) {
+      return reply
+        .code(400)
+        .send({ error: 'atem.enabled=false in studio.yaml — cannot auto-switch' });
+    }
+    if (seqName && !profile.sequences[seqName]) {
+      return reply
+        .code(404)
+        .send({ error: `Unknown sequence "${seqName}" for profile "${profileName}"` });
+    }
+    if (reactive && !profile.beatReactive.enabled) {
+      return reply
+        .code(400)
+        .send({ error: `beatReactive.enabled=false for profile "${profileName}"` });
     }
 
     const r = await openSession(body);
@@ -143,10 +156,11 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
         });
       }
     }
-    if (seqName) director.runSequence(profile.sequences[seqName]!);
+    if (reactive) director.armReactive(profile.beatReactive);
+    else if (seqName) director.runSequence(profile.sequences[seqName]!);
 
     log.info(
-      { sessionId: r.sessionId, sequence: seqName ?? null, record, cmd: 'go' },
+      { sessionId: r.sessionId, sequence: seqName ?? null, reactive, record, cmd: 'go' },
       'command ok',
     );
     return { ok: true, sessionId: r.sessionId, path: r.path, recording: record, ...director.status };
@@ -252,6 +266,24 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
   app.get('/sequences', async () => {
     const profile = resolveProfile(cfg, state.activeProfile);
     return { active: state.activeProfile, available: Object.keys(profile.sequences) };
+  });
+
+  // Beat-reactive director: fast, music-driven cutting off the OBS audio meters.
+  app.post('/reactive/arm', async (_req, reply) => {
+    if (!cfg.atem.enabled) {
+      return reply
+        .code(400)
+        .send({ error: 'atem.enabled=false in studio.yaml — daemon cannot cut' });
+    }
+    const profile = resolveProfile(cfg, state.activeProfile);
+    if (!profile.beatReactive.enabled) {
+      return reply.code(400).send({
+        error: `beatReactive.enabled=false for profile "${state.activeProfile}" in studio.yaml`,
+      });
+    }
+    director.armReactive(profile.beatReactive);
+    log.info({ cmd: 'reactive/arm' }, 'command ok');
+    return { ok: true, ...director.status };
   });
 
   // -------------------------------------------------------------- profiles

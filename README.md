@@ -57,7 +57,8 @@ All JSON, on `http://127.0.0.1:8722`.
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
-| POST | `/go` | `{name?, profile?, sequence?, record?}` | **One-button macro.** Opens a session, starts recording (unless `record:false`), and runs the named cinematic `sequence` if given — all in one call. The "walk in, hit one button" path. |
+| POST | `/go` | `{name?, profile?, sequence?, reactive?, record?}` | **One-button macro.** Opens a session, starts recording (unless `record:false`), and either runs a scripted `sequence` or arms the beat-reactive director (`reactive:true`) — all in one call. The "walk in, hit one button" path. |
+| POST | `/reactive/arm` | — | Arm the **beat-reactive director**: fast, music-driven cutting off the OBS audio meters. Cuts land on beats; shots shorten on drops and stretch on breakdowns; loud favours the closeup. 400 if `atem.enabled:false` or the profile's `beatReactive.enabled:false`. Disarm with `/auto/disarm`. |
 | POST | `/session/start` | `{name?, profile?}` | Creates dated session folder (profile template), switches OBS scene collection, points OBS record dir at it, starts the health monitor. 409 if a session is active. |
 | POST | `/session/mark` | `{label?}` | Timestamped marker. While recording, also drops an OBS chapter marker (30.2+ Hybrid MP4, best-effort). 409 if no session. |
 | POST | `/session/end` | — | Stops recording if running, writes `session.json`, fires NAS sync, stops monitor + auto-switch, returns manifest. |

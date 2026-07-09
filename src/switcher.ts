@@ -1,6 +1,7 @@
 import type { Logger } from 'pino';
-import type { AutoSwitchConfig, SequenceCue } from './config.js';
+import type { AutoSwitchConfig, BeatReactiveConfig, SequenceCue } from './config.js';
 import type { AtemClient } from './clients/atem.js';
+import { BeatReactiveEngine } from './beat-director.js';
 
 export type CutFn = (cam: number) => Promise<void>;
 
@@ -230,7 +231,7 @@ export class CueSequenceEngine {
   }
 }
 
-type SwitchEngine = AutoSwitchEngine | CueSequenceEngine;
+type SwitchEngine = AutoSwitchEngine | CueSequenceEngine | BeatReactiveEngine;
 
 /**
  * Owns the engine lifecycle + the 500ms ticker. The HTTP layer talks to
@@ -240,7 +241,7 @@ type SwitchEngine = AutoSwitchEngine | CueSequenceEngine;
  */
 export class Director {
   private engine: SwitchEngine | null = null;
-  private mode: 'rotation' | 'sequence' | null = null;
+  private mode: 'rotation' | 'sequence' | 'reactive' | null = null;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -260,6 +261,14 @@ export class Director {
     this.engine = new CueSequenceEngine(cues, (cam) => this.atem.cut(cam), this.log);
     this.mode = 'sequence';
     this.engine.arm(Date.now());
+    this.startTicker();
+  }
+
+  /** Arm the beat-reactive director (music-driven fast cutting). */
+  armReactive(settings: BeatReactiveConfig, startCam?: number): void {
+    this.engine = new BeatReactiveEngine(settings, (cam) => this.atem.cut(cam), this.log);
+    this.mode = 'reactive';
+    this.engine.arm(Date.now(), startCam);
     this.startTicker();
   }
 
@@ -292,14 +301,18 @@ export class Director {
   get status(): {
     armed: boolean;
     program: number | null;
-    mode: 'rotation' | 'sequence' | null;
+    mode: 'rotation' | 'sequence' | 'reactive' | null;
     cueIndex?: number;
+    energy?: number;
   } {
     return {
       armed: this.engine?.isArmed ?? false,
       program: this.engine?.program ?? null,
       mode: this.engine?.isArmed ? this.mode : null,
       ...(this.engine instanceof CueSequenceEngine ? { cueIndex: this.engine.cueIndex } : {}),
+      ...(this.engine instanceof BeatReactiveEngine
+        ? { energy: Number(this.engine.currentEnergy.toFixed(2)) }
+        : {}),
     };
   }
 }

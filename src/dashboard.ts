@@ -45,7 +45,12 @@ async function poll() {
     html += s.record.active
       ? tile('rec', 'REC', '● ' + (s.record.timecode || '').split('.')[0], 'recording')
       : tile('', 'REC', 'stopped', '');
-    html += tile(s.auto && s.auto.armed ? 'ok' : '', 'Auto-switch', s.auto && s.auto.armed ? (s.auto.mode === 'sequence' ? 'SEQUENCE cam ' + s.auto.program : 'ARMED cam ' + s.auto.program) : 'off', 'profile: ' + s.profile);
+    if (s.auto && s.auto.armed && s.auto.mode === 'reactive') {
+      var pct = Math.round((s.auto.energy || 0) * 100);
+      html += tile('ok', 'Director', 'BEAT · cam ' + s.auto.program, 'energy ' + pct + '% · ' + s.profile);
+    } else {
+      html += tile(s.auto && s.auto.armed ? 'ok' : '', 'Auto-switch', s.auto && s.auto.armed ? (s.auto.mode === 'sequence' ? 'SEQUENCE cam ' + s.auto.program : 'ARMED cam ' + s.auto.program) : 'off', 'profile: ' + s.profile);
+    }
     if (s.capture) {
       html += tile(
         s.capture.frozen ? 'bad' : (s.capture.watching ? 'ok' : ''),
