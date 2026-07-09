@@ -16,7 +16,7 @@ Chapter markers: OBS currently records **MKV**, so CreateRecordChapter is reject
 
 ## Immediate next steps (before ANY new features)
 
-1. Wire Companion buttons (curl commands in README; see also the Companion wiring guide added in 84c8c58). Needs the user at the Stream Deck.
+1. **Install Bitfocus Companion + wire the Stream Deck** (pro path chosen 2026-07-09). Full button map in `docs/companion-setup.md` (rewritten for the /go macro, capture-freeze feedback, confirmed camera map, cinematic reel). Daemon side is DONE: `companion.enabled: true` in studio.yaml, pushing `orchestra_health` + `orchestra_capture`. Remaining = install Companion (https://bitfocus.io/companion), add Stream Deck as a Surface, enable its HTTP API, build the STUDIO page per the guide. NOTE: the user runs the **Elgato Stream Deck app**, NOT Companion — Companion must be installed; the Elgato app alone can't POST to the daemon. The old Companion guide (84c8c58) is superseded by the current docs/companion-setup.md.
 2. Auto-switch step 9 partial: rotation + kill switch verified live 2026-07-02; manual-override pause + audio-closeup rule not yet exercised against hardware (ATEM was powered off on 2026-07-04). Needs OBS open + ATEM powered on.
 3. ~~NAS: set up SSH key auth, test sync~~ SUPERSEDED (2026-07-04): storage workflow is now T9 (record/cull) → manual export to NAS. `nas.enabled` stays `false` on purpose — step 11 of the manual test plan (auto-rsync) does not apply to this workflow and should be skipped, not fixed.
 4. Consider switching OBS to Hybrid MP4 for chapter-marker support (see above). Needs OBS open — one settings toggle.
