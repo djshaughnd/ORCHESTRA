@@ -118,6 +118,28 @@ profiles:
         - { cam: 2, holdMs: 12000, label: "cam slider" }
         - { cam: 4, holdMs: 16000, label: "rear screen cutaway" }
         # ~90s total — trim/reorder cues to match the actual reel length.
+    # Beat-reactive director — fast, music-driven cutting (POST /reactive/arm
+    # or /go with reactive:true). Reads the OBS input carrying the MUSIC and
+    # cuts on beats; shots shorten on drops, stretch on breakdowns. Tuned here
+    # for short-form TEASER pacing: the slowest dwell is maxShotMs+beatGraceMs
+    # (~4s), drops cut as fast as minShotMs (~1s).
+    beatReactive:
+      enabled: false
+      cameras: [1, 2]
+      wideCam: 1                        # favoured when quiet
+      closeupCam: 2                     # favoured when loud
+      obsInput: "Audio Input Capture"   # the MUSIC input (not the mic)
+      minShotMs: 1000
+      maxShotMs: 3500                   # hard dwell ceiling (teaser pace)
+      onsetRiseDb: 6                    # dB rise above baseline = a beat
+      refractoryMs: 250
+      beatGraceMs: 400
+      envelopeAlpha: 0.05
+      energyFloorDb: -45
+      energyCeilDb: -18                 # lower => reaches "high energy" sooner
+      lowEnergy: 0.3
+      highEnergy: 0.6
+      overridePauseMs: 6000
 
   content:
     nameTemplate: "{date}_{time}_{slug}"
