@@ -1,5 +1,5 @@
 import type { Logger } from 'pino';
-import type { AutoSwitchConfig } from './config.js';
+import type { AutoSwitchConfig, SequenceCue } from './config.js';
 import type { AtemClient } from './clients/atem.js';
 
 export type CutFn = (cam: number) => Promise<void>;
@@ -136,11 +136,111 @@ export class AutoSwitchEngine {
 }
 
 /**
+ * Scripted cinematic cue engine (V2.5). Plays a fixed, ordered cut list —
+ * e.g. a 90s DJ mixing reel: wide → slider → overhead → rear-screen cutaway
+ * — instead of AutoSwitchEngine's random rotation. Same clock-free,
+ * tick(nowMs)-driven shape so it's deterministic to test.
+ *
+ * Unlike AutoSwitchEngine, a manual cut ABORTS the sequence rather than
+ * pausing it: resuming a timed script after an unplanned interruption
+ * doesn't make sense, so "manual always wins" here means "manual ends it."
+ */
+export class CueSequenceEngine {
+  private armed = false;
+  private index = -1;
+  private cueStartedAtMs = 0;
+  private finished = false;
+
+  constructor(
+    private cues: SequenceCue[],
+    private cut: CutFn,
+    private log: Logger,
+  ) {}
+
+  get isArmed(): boolean {
+    return this.armed;
+  }
+
+  get program(): number | null {
+    return this.index >= 0 && this.index < this.cues.length ? this.cues[this.index]!.cam : null;
+  }
+
+  get isDone(): boolean {
+    return this.finished;
+  }
+
+  get cueIndex(): number {
+    return this.index;
+  }
+
+  arm(nowMs: number): void {
+    if (this.cues.length === 0) {
+      this.log.warn('cue sequence has no cues — nothing to run');
+      return;
+    }
+    this.armed = true;
+    this.finished = false;
+    this.index = -1;
+    this.advance(nowMs);
+    this.log.info({ cues: this.cues.length }, 'cue sequence ARMED');
+  }
+
+  disarm(): void {
+    if (this.armed) this.log.info('cue sequence DISARMED');
+    this.armed = false;
+  }
+
+  /** Any manual cut aborts the script — resuming the timing makes no sense. */
+  noteManualCut(_cam: number, _nowMs: number): void {
+    if (this.armed) this.log.info('manual override — cue sequence aborted');
+    this.armed = false;
+  }
+
+  /** No-op — cue sequences are scripted, not audio-reactive. Kept for a
+   *  uniform interface with AutoSwitchEngine so Director can treat either
+   *  engine the same way. */
+  updateAudioLevel(_obsInput: string, _db: number, _nowMs: number): void {
+    /* scripted sequences ignore audio */
+  }
+
+  private advance(nowMs: number): number | null {
+    this.index += 1;
+    if (this.index >= this.cues.length) {
+      this.finished = true;
+      this.armed = false;
+      this.log.info('cue sequence complete');
+      return null;
+    }
+    const cue = this.cues[this.index]!;
+    this.cueStartedAtMs = nowMs;
+    this.log.info({ cam: cue.cam, label: cue.label, holdMs: cue.holdMs }, 'sequence cut');
+    void this.cut(cue.cam).catch((err) =>
+      this.log.error({ cam: cue.cam, err: (err as Error).message }, 'sequence cut FAILED'),
+    );
+    return cue.cam;
+  }
+
+  /** Advance the engine. Returns the camera cut this tick, or null. */
+  tick(nowMs: number): number | null {
+    if (!this.armed) return null;
+    const cue = this.cues[this.index];
+    if (!cue) return null;
+    if (nowMs - this.cueStartedAtMs < cue.holdMs) return null;
+    return this.advance(nowMs);
+  }
+}
+
+type SwitchEngine = AutoSwitchEngine | CueSequenceEngine;
+
+/**
  * Owns the engine lifecycle + the 500ms ticker. The HTTP layer talks to
- * this, never to the engine directly.
+ * this, never to the engine directly. Rotation mode and sequence mode are
+ * mutually exclusive — starting one tears down the other, matching the
+ * "single active controller, kill switch always works" design.
  */
 export class Director {
-  private engine: AutoSwitchEngine | null = null;
+  private engine: SwitchEngine | null = null;
+  private mode: 'rotation' | 'sequence' | null = null;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -149,15 +249,28 @@ export class Director {
   ) {}
 
   arm(settings: AutoSwitchConfig, startCam?: number): void {
-    this.engine = new AutoSwitchEngine(
-      settings,
-      (cam) => this.atem.cut(cam),
-      this.log,
-    );
+    this.engine = new AutoSwitchEngine(settings, (cam) => this.atem.cut(cam), this.log);
+    this.mode = 'rotation';
     this.engine.arm(Date.now(), startCam);
-    if (!this.timer) {
-      this.timer = setInterval(() => this.engine?.tick(Date.now()), 500);
-    }
+    this.startTicker();
+  }
+
+  /** Run a scripted cinematic cue list (e.g. a timed multi-cam reel). */
+  runSequence(cues: SequenceCue[]): void {
+    this.engine = new CueSequenceEngine(cues, (cam) => this.atem.cut(cam), this.log);
+    this.mode = 'sequence';
+    this.engine.arm(Date.now());
+    this.startTicker();
+  }
+
+  private startTicker(): void {
+    if (this.timer) return;
+    this.timer = setInterval(() => {
+      this.engine?.tick(Date.now());
+      // A finished (non-looping) sequence tears itself down so /status
+      // reflects "idle" instead of "armed" forever after the last cue.
+      if (this.engine instanceof CueSequenceEngine && this.engine.isDone) this.disarm();
+    }, 500);
   }
 
   disarm(): void {
@@ -176,10 +289,17 @@ export class Director {
     this.engine?.updateAudioLevel(obsInput, db, Date.now());
   }
 
-  get status(): { armed: boolean; program: number | null } {
+  get status(): {
+    armed: boolean;
+    program: number | null;
+    mode: 'rotation' | 'sequence' | null;
+    cueIndex?: number;
+  } {
     return {
       armed: this.engine?.isArmed ?? false,
       program: this.engine?.program ?? null,
+      mode: this.engine?.isArmed ? this.mode : null,
+      ...(this.engine instanceof CueSequenceEngine ? { cueIndex: this.engine.cueIndex } : {}),
     };
   }
 }

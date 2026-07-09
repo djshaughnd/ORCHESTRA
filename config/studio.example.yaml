@@ -92,6 +92,21 @@ profiles:
     atemDefaultCam: 2
     autoSwitch:
       enabled: false
+    # Scripted cinematic cue lists — POST /sequence/mixingReel/run. Unlike
+    # autoSwitch's random rotation, this is a fixed, timed shot list: for a
+    # ~90s mixing reel, cut wide -> slider -> overhead -> back to wide.
+    # cam numbers below are PLACEHOLDERS — confirm the real ATEM input
+    # numbers in ATEM Software Control (Video tab) before using this; do
+    # not assume the labels on the ATEM's input cables match these numbers.
+    sequences:
+      mixingReel:
+        - { cam: 1, holdMs: 20000, label: "DJ booth wide" }
+        - { cam: 2, holdMs: 12000, label: "cam slider" }
+        - { cam: 3, holdMs: 15000, label: "overhead" }
+        - { cam: 1, holdMs: 15000, label: "DJ booth wide" }
+        - { cam: 2, holdMs: 12000, label: "cam slider" }
+        - { cam: 4, holdMs: 16000, label: "rear screen cutaway" }
+        # ~90s total — trim/reorder cues to match the actual reel length.
 
   content:
     nameTemplate: "{date}_{time}_{slug}"

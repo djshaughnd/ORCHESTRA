@@ -1,7 +1,7 @@
 import { pino } from 'pino';
 import { describe, expect, it, vi } from 'vitest';
-import type { AutoSwitchConfig } from '../src/config.js';
-import { AutoSwitchEngine, mulToDb } from '../src/switcher.js';
+import type { AutoSwitchConfig, SequenceCue } from '../src/config.js';
+import { AutoSwitchEngine, CueSequenceEngine, mulToDb } from '../src/switcher.js';
 
 const log = pino({ level: 'silent' });
 
@@ -107,6 +107,48 @@ describe('AutoSwitchEngine', () => {
     const engine = new AutoSwitchEngine(settings({ cameras: [1] }), cut, log, () => 0);
     engine.arm(0);
     expect(engine.tick(100_000)).toBeNull();
+    expect(cut).not.toHaveBeenCalled();
+  });
+});
+
+describe('CueSequenceEngine', () => {
+  const cues: SequenceCue[] = [
+    { cam: 4, holdMs: 10_000, label: 'wide' },
+    { cam: 1, holdMs: 8_000, label: 'slider' },
+    { cam: 2, holdMs: 6_000, label: 'overhead' },
+  ];
+
+  it('cuts through the script in order on schedule, then finishes', () => {
+    const cut = vi.fn(async () => {});
+    const engine = new CueSequenceEngine(cues, cut, log);
+    engine.arm(0);
+    expect(engine.program).toBe(4); // first cue fires immediately on arm
+    expect(engine.tick(9_999)).toBeNull();
+    expect(engine.tick(10_000)).toBe(1);
+    expect(engine.tick(17_999)).toBeNull();
+    expect(engine.tick(18_000)).toBe(2);
+    expect(engine.isDone).toBe(false);
+    expect(engine.tick(23_999)).toBeNull();
+    expect(engine.tick(24_000)).toBeNull(); // final cue ends, no cam 4 cut
+    expect(engine.isDone).toBe(true);
+    expect(engine.isArmed).toBe(false);
+    expect(cut).toHaveBeenCalledTimes(3);
+    expect(cut.mock.calls.map((c) => c[0])).toEqual([4, 1, 2]);
+  });
+
+  it('manual cut aborts the sequence rather than pausing it', () => {
+    const engine = new CueSequenceEngine(cues, vi.fn(async () => {}), log);
+    engine.arm(0);
+    engine.noteManualCut(3, 2_000);
+    expect(engine.isArmed).toBe(false);
+    expect(engine.tick(100_000)).toBeNull(); // stays dead, script never resumes
+  });
+
+  it('an empty cue list never arms', () => {
+    const cut = vi.fn(async () => {});
+    const engine = new CueSequenceEngine([], cut, log);
+    engine.arm(0);
+    expect(engine.isArmed).toBe(false);
     expect(cut).not.toHaveBeenCalled();
   });
 });

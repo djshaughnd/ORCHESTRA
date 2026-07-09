@@ -65,6 +65,8 @@ All JSON, on `http://127.0.0.1:8722`.
 | POST | `/cut/:cam` | — | ATEM program cut (requires `atem.enabled: true`). Also registers a manual override that pauses auto-switching. |
 | POST | `/auto/arm` | — | Arm rule-based auto-switching using the active profile. 400 if disabled in config. |
 | POST | `/auto/disarm` | — | **Kill switch.** Always succeeds. |
+| POST | `/sequence/:name/run` | — | Run a scripted cinematic cue list from the active profile's `sequences` (studio.yaml) — a fixed, timed shot order (e.g. a mixing reel), not random rotation. 400 if `atem.enabled: false`, 404 if the name isn't defined for the active profile. A manual `/cut` aborts a running sequence. |
+| GET | `/sequences` | — | Available sequence names for the active profile. |
 | GET | `/profiles` | — | Active + available profiles. |
 | POST | `/profile/:name` | — | Switch active profile (podcast / music / dj / content / default). |
 | GET | `/health` | — | Parallel checks (2s timeouts): OBS, disk free, NAS ping, OBS dropped frames. Never throws. |

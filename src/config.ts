@@ -31,6 +31,15 @@ export const AutoSwitchSchema = z
     path: ['maxShotSeconds'],
   });
 
+export const SequenceCueSchema = z.object({
+  // ATEM input number — confirm against ATEM Software Control, not guessed.
+  cam: z.number().int().positive(),
+  holdMs: z.number().int().positive(),
+  label: z.string().optional(),
+});
+
+export type SequenceCue = z.infer<typeof SequenceCueSchema>;
+
 export const ProfileSchema = z.object({
   // Overrides session.nameTemplate when set.
   nameTemplate: z.string().optional(),
@@ -40,6 +49,9 @@ export const ProfileSchema = z.object({
   atemDefaultCam: z.number().int().positive().default(1),
   lightingPreset: z.string().optional(),
   autoSwitch: AutoSwitchSchema.default({}),
+  // Named scripted cinematic cue lists (POST /sequence/:name/run). Mutually
+  // exclusive with autoSwitch's rotation — only one controller runs at a time.
+  sequences: z.record(z.array(SequenceCueSchema)).default({}),
 });
 
 export type ProfileConfig = z.infer<typeof ProfileSchema>;

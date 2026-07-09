@@ -157,6 +157,34 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
     return { ok: true, ...director.status };
   });
 
+  // ---------------------------------------------------------- sequences
+
+  app.post<{ Params: { name: string } }>('/sequence/:name/run', async (req, reply) => {
+    if (!cfg.atem.enabled) {
+      return reply
+        .code(400)
+        .send({ error: 'atem.enabled=false in studio.yaml — daemon cannot cut' });
+    }
+    const profile = resolveProfile(cfg, state.activeProfile);
+    const cues = profile.sequences[req.params.name];
+    if (!cues) {
+      return reply.code(404).send({
+        error: `Unknown sequence "${req.params.name}" for profile "${state.activeProfile}"`,
+      });
+    }
+    director.runSequence(cues);
+    log.info(
+      { sequence: req.params.name, cues: cues.length, cmd: 'sequence/run' },
+      'command ok',
+    );
+    return { ok: true, ...director.status };
+  });
+
+  app.get('/sequences', async () => {
+    const profile = resolveProfile(cfg, state.activeProfile);
+    return { active: state.activeProfile, available: Object.keys(profile.sequences) };
+  });
+
   // -------------------------------------------------------------- profiles
 
   app.get('/profiles', async () => ({

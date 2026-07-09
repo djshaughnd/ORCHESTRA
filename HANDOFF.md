@@ -29,9 +29,11 @@ Chapter markers: OBS currently records **MKV**, so CreateRecordChapter is reject
 - ~~OBS chapter markers~~ DONE (2026-07-02): `/session/mark` also calls obs-websocket `CreateRecordChapter` (cleaner than the hotkey) while recording. Best-effort; needs OBS 30.2+ recording Hybrid MP4. Toggle: `obs.chapterMarkers` (default true).
 - ~~launchd plist placeholder paths~~ DONE (2026-07-02): plist now points at `~/Documents/GitHub/ORCHESTRA` and node at `~/.local/node/bin/node` (verified via `which node` — homebrew node is NOT installed on this machine).
 
-## V3 (GATED — do not start until 10+ clean real V2 sessions)
+## V3 — GATE OVERRIDDEN 2026-07-09 by explicit user decision
 
-In order, from the original build plan (docs: studio-director-build-plan.md in the user's files):
+The gate below ("do not start until 10+ clean real sessions") was real project policy from 2026-07-02 through 2026-07-09, and is the reason C1–C6 sat untouched. On 2026-07-09 the user explicitly chose to override it and build the full cinematic-automation vision now (one Stream Deck button → lighting + camera switching + gimbal + storage), accepting the reliability risk on an unproven V2 base. Record any future full-gate override the same way: explicit, dated, in this file — don't infer it from silence.
+
+Original order, from the build plan (studio-director-build-plan.md in the user's files):
 
 - C1. OBS → RTSP/SRT feed reachable from the Jetson Orin AGX; measure latency.
 - C2. `director-eyes` on Jetson (Python): person detection + shot scoring → MQTT `eyes/suggestion {cam, score, reason}` @ ~2 Hz.
@@ -39,6 +41,30 @@ In order, from the original build plan (docs: studio-director-build-plan.md in t
 - C4. Sony Camera Remote SDK wrapper (C++ → small binary the daemon shells to): record tally + Power Zoom presets on the 16-35 PZ (A7 IV first).
 - C5. DJI RS4 gimbal spike, timeboxed 1 week: verify RS 4 (non-Pro) on the DJI R SDK supported list → CAN adapter + presets, else Intelligent Tracking Module. Do not extend the timebox.
 - C6. Mission Control/Maestro integration: publish session events (started/ended/markers/paths) over MQTT; session metadata → Postgres on the NAS.
+
+The cinematic-automation build (below) supersedes/reorders C4–C6 for the "one button = mini cinematic reel" goal; C1–C3 (Jetson vision) are unrelated to that goal and remain untouched.
+
+## Cinematic cue-sequencer — BUILT 2026-07-09 (tested, verified live)
+
+New scripted (non-random) multi-cam mode, separate from `autoSwitch`'s rotation engine, for producing a fixed-length cinematic reel (e.g. a 90s DJ mixing reel: wide → slider → overhead → cutaway) instead of random cuts.
+
+- `src/switcher.ts`: `CueSequenceEngine` — same clock-free `tick(nowMs)`-driven shape as `AutoSwitchEngine` (see CLAUDE.md testing conventions). Plays an ordered `SequenceCue[]` list, self-disarms when the list completes, and — unlike rotation mode — a manual cut **aborts** the sequence rather than pausing it (resuming a timed script after an unplanned interruption doesn't make sense). `Director` now holds either engine (`mode: 'rotation' | 'sequence' | null`), mutually exclusive, single ticker.
+- `src/config.ts`: `sequences: Record<string, SequenceCue[]>` added to `ProfileSchema` — named cue lists per profile, defined in `studio.yaml`.
+- `src/http.ts`: `POST /sequence/:name/run` (400 if `atem.enabled=false`, 404 if the active profile has no sequence with that name) and `GET /sequences` (list available names for the active profile).
+- Tests: `test/switcher.test.ts` (CueSequenceEngine: in-order cuts on schedule, self-finish, manual-abort, empty-list no-arm). 58/58 total passing, typecheck clean.
+- Verified live end-to-end against the real daemon (with ATEM physically off, to confirm graceful degradation): armed, cut on schedule at the exact configured `holdMs` boundaries, self-disarmed after the last cue, no hang.
+- **Not yet done**: the live `studio.yaml` `dj` profile has no real `sequences` defined — `config/studio.example.yaml` has a fully-commented `mixingReel` example, but its `cam` numbers are PLACEHOLDERS. Confirm the ATEM's actual input-to-label mapping in ATEM Software Control (cables were labeled `CAM SLIDER` / `OVERHEAD` / `REAR SCREEN` + one unlabeled input in the photos) before copying real numbers into `studio.yaml`.
+- **Not yet done**: no macro endpoint ties `/session/start` + `/record/start` + `/sequence/:name/run` into one Stream Deck press yet — right now it's 3 curl calls. Natural next increment once the real cue numbers are confirmed.
+
+## Hardware SDK investigation — 2026-07-09 (Sony / DJI / amaran)
+
+Findings before writing any driver code, so the build doesn't chase dead ends:
+
+**Sony Camera Remote SDK — real, but manual step required.** Both cameras on the rig — **Sony A7C and A7 IV** — are confirmed on Sony's official supported-camera list. Real path: register as a Sony developer, download the C++ SDK, compile a small binary ORCHESTRA shells out to, control ISO/aperture/record-trigger per camera. **Not started**: registering for the SDK means accepting Sony's developer license agreement, which is the kind of "accept terms on your behalf" action Claude Code should not do silently — needs the user to register and accept the EULA themselves; I can write the wrapper/binary integration once the SDK is downloaded. Two cameras also means the daemon needs to track two independent camera sessions (likely USB, one config entry per camera), not just one.
+
+**DJI RS4 gimbal — genuinely risky, proceeding anyway per explicit user decision.** Searched DJI's own forums: multiple users report **no signal** trying to drive the RS4 over its CAN port with USB-CAN adapters, and DJI's downloads page reportedly serves the older RS2-era "R SDK" rather than a true RS4 SDK — this matches (and validates) the caution in the original C5 spike description. User's explicit call: "do not skip, I bought this gimbal because SDK control was supposed to be possible; treat it as a separate cam angle but set up the necessary infrastructure." So: build the ATEM-side plumbing so the gimbal is just another numbered input in cue sequences (works regardless of SDK outcome — no dependency), and separately timebox the actual CAN-bus SDK spike as C5 originally specified (1 week, do not extend, fall back to manual/app-driven operation if it fails). **DJI Ronin desktop app is already installed** on this Mac (`/Applications/DJI Ronin.app`) — not yet inspected for an official "request SDK access" flow like amaran's; check that before attempting raw CAN-bus code.
+
+**amaran lighting — token path was wrong; real path found, blocked on computer-use contention.** HANDOFF previously said this was "blocked on a pending Sidus OpenAPI token, applied for, takes days" — checked Gmail, **no such application was ever actually submitted** (only a Dec 2025 amaran Creators mobile-app login exists). The real mechanism: **amaran Desktop.app is already installed** on this Mac, with an existing Elgato Stream Deck plugin (`com.amarancreators.controller.sdPlugin`) already present — so the lights are already controllable manually from the Stream Deck today, outside ORCHESTRA. For programmatic control: launched the app, found it runs a local Python `websockets` server (two ports appeared: `12345` and `33782`), but both are silent to blind unauthenticated probes — the sanctioned path is applying for OpenAPI/local-control access from inside the app's own UI (Settings), same "day or two" review wait but at least self-serve, not email-based. **Blocked this session**: computer-use was locked by another concurrent Claude session when I tried to drive the UI. Next session: get computer-use access, open amaran Desktop → find and submit the OpenAPI/developer access request, then get the actual local API's request/response format from its docs once granted (do not reverse-engineer the raw WebSocket protocol blind).
 
 ## Reference material on this machine (found 2026-07-02)
 

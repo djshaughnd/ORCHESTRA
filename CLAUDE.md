@@ -21,7 +21,7 @@ Node 20+, TypeScript strict ESM (NodeNext), Fastify, obs-websocket-js (v5), atem
 - `src/http.ts` — Fastify routes. Thin: parse/validate → call manager → respond.
 - `src/clients/obs.ts` — OBS WS wrapper: auto-reconnect w/ backoff, fail-fast when down.
 - `src/clients/atem.ts` — AtemClient interface; stub when atem.enabled=false.
-- `src/switcher.ts` — AutoSwitchEngine (pure, tick(nowMs)-driven, injectable RNG) + Director (owns ticker/lifecycle).
+- `src/switcher.ts` — AutoSwitchEngine (random rotation, pure, tick(nowMs)-driven, injectable RNG) + CueSequenceEngine (scripted cinematic cue lists, same tick-driven shape) + Director (owns ticker/lifecycle, holds whichever engine is active — mutually exclusive).
 - `src/monitor.ts`, `src/health.ts`, `src/rename.ts`, `src/jobs/sync.ts` — self-explanatory.
 
 ## Hard rules (do not violate)
@@ -41,7 +41,7 @@ Engine/state-machine code must be clock-free and deterministic: drive via `tick(
 
 ## Status
 
-V1 + V2 complete (see HANDOFF.md for detail and V3 tickets). V3 is GATED: do not start V3 work until the user confirms 10+ clean real V2 sessions.
+V1 + V2 complete. V3's 10-clean-session gate was explicitly overridden by the user on 2026-07-09 for a full cinematic-automation build (lighting + camera switching/settings + gimbal + storage, one Stream Deck button). See HANDOFF.md for full detail, current build state, and hardware SDK investigation findings (Sony/DJI/amaran).
 
 ## Docs
 
