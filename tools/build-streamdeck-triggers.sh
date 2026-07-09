@@ -30,7 +30,7 @@ build "MARK"      "curl -sS -X POST $BASE/session/mark -H 'Content-Type: applica
 build "END"       "curl -sS -X POST $BASE/session/end"
 build "CAM1-HERO" "curl -sS -X POST $BASE/cut/1"
 build "CAM2-OVER" "curl -sS -X POST $BASE/cut/2"
-build "REEL"      "curl -sS -X POST $BASE/sequence/mixingReel/run"
+build "REEL"      "curl -sS -X POST $BASE/profile/dj; curl -sS -X POST $BASE/sequence/mixingReel/run"
 build "KILL"      "curl -sS -X POST $BASE/auto/disarm"
 
 echo "Done. In the Elgato Stream Deck app, drag 'System > Open' onto a key and"
