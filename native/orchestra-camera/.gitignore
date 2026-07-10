@@ -1,0 +1,6 @@
+# Sony CrSDK is license-restricted and large (~30MB of dylibs) — never commit.
+# Re-populate from the Sony download; see README.md.
+vendor/
+
+# CMake build output
+build/
