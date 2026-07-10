@@ -14,6 +14,15 @@ Working today: session lifecycle (`/session/start|mark|end`), record control, he
 
 Chapter markers: OBS currently records **MKV**, so CreateRecordChapter is rejected (warn logged, marker still succeeds). To get real in-file chapters, switch OBS output format to **Hybrid MP4** (Settings → Output → Recording). Note recording bitrate observed ~12 MB/s (~42 GB/hr) — budget disk accordingly.
 
+## ✅ END-TO-END WORKFLOW VALIDATED LIVE — 2026-07-09
+
+Shaughn ran the full "walk in, hit one button" flow on real hardware and confirmed it works excellently. Locked in and working:
+- **Stream Deck ORCHESTRA profile** (built via the app UI): GO / CAM1 / CAM2 / KILL / MARK / END / REEL, each firing a trigger app in `~/Documents/ORCHESTRA-StreamDeck/` → daemon curl. GO = session + record + beat-reactive cutting, hands-free.
+- **Beat-reactive director** cutting on the music (teaser pacing, ~1–4s), **capture watchdog**, **T9 recording**, **health monitor** — all live.
+- **Recording quality**: OBS switched to **Apple HEVC hardware @ 50 Mbps** + Spatial AQ (was H.264). Grain root cause is LIGHTING (dark room → auto-ISO on the Sonys → sensor noise), not the pipeline — fix is lights + manual/locked ISO. Cameras currently in AUTO.
+
+Open threads the user paused on (all optional, none blocking): Sony SDK ISO-lock (needs user to register/download the SDK — both cams support Wi-Fi, no cables needed), amaran lighting control, OBS vertical/reel canvas format, camera manual-ISO.
+
 ## Immediate next steps (before ANY new features)
 
 1. ~~**Wire the Stream Deck**~~ **DONE 2026-07-09** — built a dedicated **"ORCHESTRA" profile** on the Stream Deck + (via the app UI, driven by computer-use, no risk to the user's 40 existing profiles). 7 keys, all "System → Open" actions pointing at the tested trigger apps in `~/Documents/ORCHESTRA-StreamDeck/`: row 1 = GO / CAM1 / CAM2 / KILL, row 2 = MARK / END / REEL. Verified the .app→daemon→ATEM chain live (launching CAM1-HERO.app cut the real ATEM to program 1 — identical to a physical key press). Only the literal physical press is untested (can't press hardware via automation) — user presses GO to confirm. REEL.app switches to the dj profile before running the reel so it works regardless of active profile. The three approaches, for reference:
