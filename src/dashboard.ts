@@ -64,17 +64,35 @@ async function poll() {
       if (cam.error) {
         html += tile('bad', 'Camera', 'no link', cam.error);
       } else if (cam.iso != null) {
-        // raw SDK values -> human: fnumber is f-stop x100.
         const f = cam.fnumber != null ? 'f/' + (cam.fnumber / 100).toFixed(1) : '—';
-        const applied = cam.lastApplied
-          ? 'locked ISO ' + (cam.lastApplied.iso != null ? cam.lastApplied.iso : '—')
-          : 'live (not locked)';
+        const mode = cam.exposureMode === 33875 ? 'Movie M'
+                   : cam.exposureMode === 1 ? 'Photo M'
+                   : cam.exposureMode != null ? 'mode ' + cam.exposureMode : '';
+        const applied = cam.lastApplied ? 'locked ISO ' + cam.lastApplied.iso : 'not locked';
         html += tile('ok', 'Camera', 'ISO ' + cam.iso + ' · ' + f,
-          (cam.model || 'camera') + ' · ' + applied);
+          (cam.model || 'camera') + ' · ' + mode + ' · ' + applied);
       } else {
         html += tile('', 'Camera', 'idle', 'no reading yet');
       }
     }
+    // ---- signal chain: where resolution is won or lost ----
+    try {
+      const sc = await fetch('/signal-chain').then(r => r.json());
+      if (sc.obs && !sc.obs.error) {
+        const o = sc.obs;
+        html += tile('', 'Capture in', o.sourceResolution || '—',
+          (o.captureSource || 'source') + ' · ATEM max 1920x1080');
+        const up = o.verticalUpscale;
+        html += tile(up && up > 1.05 ? 'bad' : 'ok', 'Recording out',
+          (o.output || '—') + ' @ ' + (o.fps || '—') + 'fps',
+          up && up > 1.05 ? '⚠ upscaling ' + up + 'x — softens image' : 'native, no upscale');
+        if (o.encoder) {
+          const enc = String(o.encoder).includes('hevc') ? 'HEVC (H.265)'
+                    : String(o.encoder).includes('avc') ? 'H.264' : o.encoder;
+          html += tile('', 'Encoder', enc, 'scene: ' + (o.scene || '—'));
+        }
+      }
+    } catch (e) { /* signal chain optional */ }
     for (const name in h.checks) {
       const c = h.checks[name];
       html += tile(c.ok ? 'ok' : 'bad', name, c.ok ? 'OK' : 'FAIL', c.detail);

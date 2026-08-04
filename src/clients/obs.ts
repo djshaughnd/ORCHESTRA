@@ -188,6 +188,51 @@ export class ObsClient {
     });
   }
 
+  /** Canvas/output/fps — the resolution the recording is actually encoded at. */
+  async getVideoInfo(): Promise<{
+    baseWidth: number; baseHeight: number;
+    outputWidth: number; outputHeight: number; fps: number;
+  }> {
+    const r = await this.call<{
+      baseWidth: number; baseHeight: number;
+      outputWidth: number; outputHeight: number;
+      fpsNumerator: number; fpsDenominator: number;
+    }>('GetVideoSettings');
+    return {
+      baseWidth: r.baseWidth, baseHeight: r.baseHeight,
+      outputWidth: r.outputWidth, outputHeight: r.outputHeight,
+      fps: r.fpsDenominator ? r.fpsNumerator / r.fpsDenominator : 0,
+    };
+  }
+
+  /** Native pixel size the capture source is delivering (before scaling). */
+  async getSourceDimensions(sceneName: string, sourceName: string): Promise<{ width: number; height: number } | null> {
+    const list = await this.call<{ sceneItems: Array<{ sourceName: string; sceneItemId: number }> }>(
+      'GetSceneItemList', { sceneName },
+    );
+    const item = list.sceneItems.find((i) => i.sourceName === sourceName);
+    if (!item) return null;
+    const t = await this.call<{ sceneItemTransform: { sourceWidth: number; sourceHeight: number } }>(
+      'GetSceneItemTransform', { sceneName, sceneItemId: item.sceneItemId },
+    );
+    return { width: t.sceneItemTransform.sourceWidth, height: t.sceneItemTransform.sourceHeight };
+  }
+
+  async getCurrentScene(): Promise<string> {
+    const r = await this.call<{ currentProgramSceneName: string }>('GetCurrentProgramScene');
+    return r.currentProgramSceneName;
+  }
+
+  /** Recording encoder id from the active OBS profile. */
+  async getRecordEncoder(): Promise<string | null> {
+    try {
+      const r = await this.call<{ parameterValue?: string; defaultParameterValue?: string }>(
+        'GetProfileParameter', { parameterCategory: 'AdvOut', parameterName: 'RecEncoder' },
+      );
+      return r.parameterValue ?? r.defaultParameterValue ?? null;
+    } catch { return null; }
+  }
+
   async getStats(): Promise<{ skipped: number; total: number }> {
     const res = await this.call<{
       outputSkippedFrames: number;

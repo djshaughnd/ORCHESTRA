@@ -443,6 +443,41 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
     return { ok: results.every((r) => r.ok), profile: name, results };
   });
 
+  // Full signal chain — where resolution is won or lost, end to end.
+  app.get('/signal-chain', async () => {
+    const out: Record<string, unknown> = {};
+    out.camera = camera.isEnabled ? camera.snapshot : null;
+    out.atem = { connected: atem.isConnected, program: director.status.program, maxResolution: '1920x1080 (hardware limit)' };
+    if (obs.isConnected) {
+      try {
+        const v = await obs.getVideoInfo();
+        const scene = await obs.getCurrentScene();
+        const src = cfg.obs.captureSource
+          ? await obs.getSourceDimensions(scene, cfg.obs.captureSource).catch(() => null)
+          : null;
+        const encoder = await obs.getRecordEncoder();
+        const upscale = src && src.width ? Number((v.baseHeight / src.height).toFixed(2)) : null;
+        out.obs = {
+          scene, encoder,
+          captureSource: cfg.obs.captureSource,
+          sourceResolution: src ? `${src.width}x${src.height}` : null,
+          canvas: `${v.baseWidth}x${v.baseHeight}`,
+          output: `${v.outputWidth}x${v.outputHeight}`,
+          fps: v.fps,
+          verticalUpscale: upscale,
+          warning: upscale && upscale > 1.05
+            ? `output is ${upscale}x the source — upscaling loses sharpness`
+            : null,
+        };
+      } catch (err) {
+        out.obs = { error: (err as Error).message };
+      }
+    } else {
+      out.obs = { error: 'OBS not connected' };
+    }
+    return out;
+  });
+
   app.get('/health', async () => runChecks());
 
   app.get('/status', async () => {

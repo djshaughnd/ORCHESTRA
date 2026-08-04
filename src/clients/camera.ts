@@ -98,6 +98,21 @@ export class CameraClient {
     return true;
   }
 
+  /**
+   * Human-readable decode of the raw SDK values, for the dashboard.
+   * fnumber is f-stop x100; shutter is a raw SDK code; exposureMode 0x8053
+   * is Movie/Manual on the A7 IV.
+   */
+  static describe(s: CameraState): { aperture: string; mode: string } {
+    const aperture = s.fnumber != null ? `f/${(s.fnumber / 100).toFixed(1)}` : '—';
+    const mode =
+      s.exposureMode === 0x8053 ? 'Movie M'
+      : s.exposureMode === 0x8050 ? 'Movie P'
+      : s.exposureMode === 1 ? 'Photo M'
+      : s.exposureMode != null ? `mode ${s.exposureMode}` : '—';
+    return { aperture, mode };
+  }
+
   /** Read the camera's live settings into state. Returns false on failure. */
   async refresh(): Promise<boolean> {
     if (!this.enabled) return false;

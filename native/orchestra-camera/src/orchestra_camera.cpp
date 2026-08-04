@@ -59,6 +59,7 @@ const char* propName(CrInt32u code) {
         case SDK::CrDeviceProperty_FNumber:            return "fnumber";
         case SDK::CrDeviceProperty_ExposureProgramMode:return "exposureMode";
         case SDK::CrDeviceProperty_WhiteBalance:       return "whiteBalance";
+        case SDK::CrDeviceProperty_Movie_HDMIOutputResolution: return "hdmiResolution";
         default: return nullptr;
     }
 }
@@ -136,6 +137,9 @@ int main(int argc, char** argv) {
             { SDK::CrDeviceProperty_IsoSensitivity, "--iso" },
             { SDK::CrDeviceProperty_ShutterSpeed,   "--shutter" },
             { SDK::CrDeviceProperty_FNumber,        "--fnumber" },
+            // Movie HDMI output resolution. CrHDMIResolution_1080p = 4.
+            // The ATEM Mini Pro ISO cannot lock 4K, so movie mode needs 1080p.
+            { SDK::CrDeviceProperty_Movie_HDMIOutputResolution, "--hdmi" },
         };
         bool any = false;
         std::cout << "{\"ok\":true,\"set\":[";
@@ -159,6 +163,29 @@ int main(int argc, char** argv) {
         if (!any) { std::cerr << "set: nothing to do (pass --iso / --shutter / --fnumber)\n"; rc = 1; }
         // let the camera apply + report back
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    if (cmd == "dump") {
+        SDK::CrDeviceProperty* props = nullptr;
+        CrInt32 num = 0;
+        auto gerr = SDK::GetDeviceProperties(handle, &props, &num);
+        if (gerr == 0 && props) {
+            std::cout << "{\"ok\":true,\"model\":\"" << (info ? info->GetModel() : "?")
+                      << "\",\"count\":" << num << ",\"properties\":[";
+            for (CrInt32 i = 0; i < num; ++i) {
+                if (i) std::cout << ",";
+                const char* n = propName(props[i].GetCode());
+                std::cout << "{\"code\":" << props[i].GetCode()
+                          << ",\"name\":\"" << (n ? n : "") << "\""
+                          << ",\"value\":" << props[i].GetCurrentValue()
+                          << ",\"type\":" << props[i].GetValueType() << "}";
+            }
+            std::cout << "]}\n";
+            SDK::ReleaseDeviceProperties(handle, props);
+        } else {
+            std::cout << "{\"ok\":false,\"error\":\"GetDeviceProperties 0x" << std::hex << gerr << "\"}\n";
+            rc = 1;
+        }
     }
 
     if (cmd == "get" || cmd == "set") {
