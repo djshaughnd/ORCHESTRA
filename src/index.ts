@@ -6,6 +6,7 @@ import { createLogger } from './log.js';
 import { ObsClient } from './clients/obs.js';
 import { createAtemClient } from './clients/atem.js';
 import { CompanionClient } from './clients/companion.js';
+import { AmaranClient } from './clients/amaran.js';
 import { CaptureWatchdog } from './capture-watchdog.js';
 import { namePartsForNow, SessionManager } from './session.js';
 import { startNasSync } from './jobs/sync.js';
@@ -14,6 +15,7 @@ import { diskFreeBytesAt, isVolumeMounted, pingHost, runHealthChecks } from './h
 import { HealthMonitor } from './monitor.js';
 import { buildTakeFilename } from './rename.js';
 import { Director, mulToDb } from './switcher.js';
+import { resolveAmaranSecret } from './secrets.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const configPath = process.env.ORCHESTRA_CONFIG ?? resolve(repoRoot, 'config/studio.yaml');
@@ -53,6 +55,23 @@ async function main(): Promise<void> {
     cfg.companion.url,
     cfg.companion.enabled,
     log.child({ client: 'companion' }),
+  );
+  const amaranSecret = cfg.amaran.enabled
+    ? await resolveAmaranSecret({
+        envName: cfg.amaran.secretEnv,
+        keychainService: cfg.amaran.keychainService,
+        keychainAccount: cfg.amaran.keychainAccount,
+      })
+    : undefined;
+  const amaran = new AmaranClient(
+    {
+      enabled: cfg.amaran.enabled,
+      url: cfg.amaran.url,
+      requestTimeoutMs: cfg.amaran.requestTimeoutMs,
+      minRequestIntervalMs: cfg.amaran.minRequestIntervalMs,
+      ...(amaranSecret ? { secret: amaranSecret } : {}),
+    },
+    log.child({ client: 'amaran' }),
   );
   const director = new Director(atem, log.child({ mod: 'director' }));
 
@@ -156,6 +175,7 @@ async function main(): Promise<void> {
   });
 
   await obs.start();
+  await amaran.start();
   try {
     await atem.connect();
   } catch (err) {
@@ -188,6 +208,7 @@ async function main(): Promise<void> {
     director,
     monitor,
     captureWatchdog,
+    amaran,
     state,
     runChecks,
     log: log.child({ mod: 'http' }),
@@ -216,6 +237,7 @@ async function main(): Promise<void> {
     }
     await app.close();
     await obs.stop();
+    await amaran.stop();
     await atem.disconnect();
     log.info('orchestra stopped');
     process.exit(0);

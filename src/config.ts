@@ -73,6 +73,44 @@ export const SequenceCueSchema = z.object({
 
 export type SequenceCue = z.infer<typeof SequenceCueSchema>;
 
+export const LightingFixtureTargetSchema = z
+  .object({
+    sleep: z.boolean().optional(),
+    // amaran OpenAPI represents intensity as 0..1000 (1000 = 100%).
+    intensity: z.number().int().min(0).max(1000).optional(),
+    cct: z.number().int().min(1800).max(20000).optional(),
+    // Vendor-neutral G/M representation: 100 = neutral, 0..200 supported.
+    gm: z.number().int().min(0).max(200).optional(),
+  })
+  .refine((target) => Object.values(target).some((value) => value !== undefined), {
+    message: 'lighting target must set at least one property',
+  });
+
+export const CameraTargetSchema = z
+  .object({
+    shutter: z.string().regex(/^1\/[1-9]\d*$/, 'use shutter format such as 1/60').optional(),
+    aperture: z.number().positive().max(32).optional(),
+    iso: z.number().int().min(50).max(102400).optional(),
+    whiteBalanceK: z.number().int().min(2000).max(10000).optional(),
+  })
+  .refine((target) => Object.values(target).some((value) => value !== undefined), {
+    message: 'camera target must set at least one property',
+  });
+
+export const SceneRecipeSchema = z.object({
+  lighting: z
+    .object({
+      transitionMs: z.number().int().nonnegative().max(10_000).default(1000),
+      // Keys are stable fixture names from GET /lighting/discover.
+      fixtures: z.record(LightingFixtureTargetSchema).default({}),
+    })
+    .default({}),
+  // Keys are camera aliases (for example a7iv or a7c), not ATEM inputs.
+  cameras: z.record(CameraTargetSchema).default({}),
+});
+
+export type SceneRecipeConfig = z.infer<typeof SceneRecipeSchema>;
+
 export const ProfileSchema = z.object({
   // Overrides session.nameTemplate when set.
   nameTemplate: z.string().optional(),
@@ -81,6 +119,9 @@ export const ProfileSchema = z.object({
   obsSceneCollection: z.string().optional(),
   atemDefaultCam: z.number().int().positive().default(1),
   lightingPreset: z.string().optional(),
+  // Deterministic hardware targets selected by the future AI policy engine.
+  // Phase 1 exposes these only as a dry-run plan; no SDK writes are enabled.
+  sceneRecipe: SceneRecipeSchema.optional(),
   autoSwitch: AutoSwitchSchema.default({}),
   // Named scripted cinematic cue lists (POST /sequence/:name/run). Mutually
   // exclusive with autoSwitch's rotation — only one controller runs at a time.
@@ -137,6 +178,23 @@ export const ConfigSchema = z.object({
       // without polling. Requires Companion Settings -> HTTP API enabled.
       enabled: z.boolean().default(false),
       url: z.string().url().default('http://127.0.0.1:8000'),
+    })
+    .default({}),
+  amaran: z
+    .object({
+      // Off by default: lighting must never block recording or surprise the room.
+      enabled: z.boolean().default(false),
+      url: z.string().url().default('ws://127.0.0.1:12345'),
+      // The secret value lives outside studio.yaml; only its environment name is stored here.
+      secretEnv: z
+        .string()
+        .regex(/^[A-Z_][A-Z0-9_]*$/)
+        .default('AMARAN_OPENAPI_SECRET'),
+      keychainService: z.string().min(1).default('ORCHESTRA_AMARAN_OPENAPI'),
+      keychainAccount: z.string().min(1).default('orchestra'),
+      requestTimeoutMs: z.number().int().positive().default(2500),
+      // amaran devices process at most one update every 200 ms.
+      minRequestIntervalMs: z.number().int().min(200).default(200),
     })
     .default({}),
   atem: z.object({

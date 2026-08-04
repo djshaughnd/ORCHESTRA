@@ -20,6 +20,12 @@ describe('config validation', () => {
     expect(cfg.obs.chapterMarkers).toBe(true);
     expect(cfg.companion.enabled).toBe(false);
     expect(cfg.companion.url).toBe('http://127.0.0.1:8000');
+    expect(cfg.amaran.enabled).toBe(false);
+    expect(cfg.amaran.url).toBe('ws://127.0.0.1:12345');
+    expect(cfg.amaran.secretEnv).toBe('AMARAN_OPENAPI_SECRET');
+    expect(cfg.amaran.keychainService).toBe('ORCHESTRA_AMARAN_OPENAPI');
+    expect(cfg.amaran.keychainAccount).toBe('orchestra');
+    expect(cfg.amaran.minRequestIntervalMs).toBe(200);
   });
 
   it('expands ~ in recordingsRoot', () => {
@@ -87,5 +93,21 @@ describe('profiles (V2)', () => {
     const cfg = parseConfig(valid);
     const p = resolveProfile(cfg, 'default');
     expect(p.autoSwitch.cameras).toEqual([1, 2]);
+  });
+
+  it('rejects unsafe lighting and camera scene targets', () => {
+    expect(() =>
+      parseConfig({
+        ...valid,
+        profiles: {
+          content: {
+            sceneRecipe: {
+              lighting: { fixtures: { key: { intensity: 1001 } } },
+              cameras: { a7iv: { shutter: 'auto', iso: 200000 } },
+            },
+          },
+        },
+      }),
+    ).toThrowError(/sceneRecipe/);
   });
 });

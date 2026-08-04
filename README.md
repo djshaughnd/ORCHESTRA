@@ -73,7 +73,21 @@ All JSON, on `http://127.0.0.1:8722`.
 | POST | `/profile/:name` | — | Switch active profile (podcast / music / dj / content / default). |
 | GET | `/health` | — | Parallel checks (2s timeouts): OBS, disk free, NAS ping, OBS dropped frames. Never throws. |
 | GET | `/status` | — | Session, profile, auto-switch state, OBS/ATEM connectivity, record state, uptime. |
+| GET | `/lighting/status` | — | Read-only amaran connection status. Never exposes the API secret. |
+| GET | `/lighting/discover` | — | Read-only amaran protocol, fixture, group, and scene discovery. |
+| GET | `/lighting/fixture/:nodeId/state` | — | Read-only power, intensity, CCT, and G/M state for one discovered fixture. |
+| GET | `/scene/plan?profile=name` | — | Dry-run lighting/camera commands for a profile. Phase 1 cannot execute them. |
 | GET | `/` | — | Live HTML dashboard (polls /status + /health). |
+
+### amaran lighting — Phase 1 safety boundary
+
+Set `amaran.enabled: true` only after the approved secret is stored in macOS
+Keychain under the configured service/account (defaults:
+`ORCHESTRA_AMARAN_OPENAPI` / `orchestra`). `amaran.secretEnv` is retained as a
+development fallback. Never place the secret in `studio.yaml`, launchd, logs,
+HTTP requests, or source control. Phase 1 is deliberately read-only: it can
+discover fixtures/scenes and render a `/scene/plan`, but has no route that can
+execute a `set_*` lighting or camera command.
 
 ## Companion buttons (Generic HTTP module)
 

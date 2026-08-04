@@ -46,6 +46,20 @@ companion:
   enabled: false
   url: "http://127.0.0.1:8000"
 
+amaran:
+  # Official local OpenAPI exposed by amaran Desktop. Phase 1 is read-only:
+  # status, fixture discovery, and dry-run plans; no light-changing route exists.
+  enabled: false
+  url: "ws://127.0.0.1:12345"
+  # Store the approved secret outside YAML under this environment variable.
+  secretEnv: "AMARAN_OPENAPI_SECRET"
+  # Live installs prefer macOS Keychain; the environment is only a fallback.
+  keychainService: "ORCHESTRA_AMARAN_OPENAPI"
+  keychainAccount: "orchestra"
+  requestTimeoutMs: 2500
+  # Vendor devices process one request every 200ms; never lower this.
+  minRequestIntervalMs: 200
+
 atem:
   # Static IP of the ATEM (Pro-tier units have Ethernet).
   ip: "192.168.1.60"
@@ -145,6 +159,16 @@ profiles:
     nameTemplate: "{date}_{time}_{slug}"
     autoSwitch:
       enabled: false
+    # Dry-run scene recipe example. Fixture names must come from
+    # GET /lighting/discover; camera aliases will be mapped by the Sony bridge.
+    # sceneRecipe:
+    #   lighting:
+    #     transitionMs: 1000
+    #     fixtures:
+    #       "#1 KEY": { sleep: false, intensity: 450, cct: 5000, gm: 100 }
+    #       "FILL #2": { sleep: false, intensity: 200, cct: 5000, gm: 100 }
+    #   cameras:
+    #     a7iv: { shutter: "1/60", aperture: 4, iso: 500, whiteBalanceK: 5000 }
 
 http:
   # Companion calls the daemon here (Generic HTTP module).

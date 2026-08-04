@@ -10,6 +10,8 @@ import type { Director } from './switcher.js';
 import type { AtemClient } from './clients/atem.js';
 import type { ObsClient } from './clients/obs.js';
 import type { CaptureWatchdog } from './capture-watchdog.js';
+import type { AmaranClient } from './clients/amaran.js';
+import { buildScenePlan } from './scene-plan.js';
 
 export interface StudioState {
   activeProfile: string;
@@ -23,6 +25,7 @@ export interface HttpDeps {
   director: Director;
   monitor: HealthMonitor;
   captureWatchdog: CaptureWatchdog | null;
+  amaran: AmaranClient;
   state: StudioState;
   runChecks: () => Promise<HealthReport>;
   log: Logger;
@@ -30,8 +33,19 @@ export interface HttpDeps {
 }
 
 export function buildServer(deps: HttpDeps): FastifyInstance {
-  const { cfg, sessions, obs, atem, director, monitor, captureWatchdog, state, runChecks, log } =
-    deps;
+  const {
+    cfg,
+    sessions,
+    obs,
+    atem,
+    director,
+    monitor,
+    captureWatchdog,
+    amaran,
+    state,
+    runChecks,
+    log,
+  } = deps;
   const app = Fastify({ logger: false });
 
   app.setErrorHandler((err, _req, reply) => {
@@ -303,6 +317,56 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
     return { ok: true, active: name };
   });
 
+  // ---------------------------------------------------- scene / lighting v1
+
+  // Read-only by design. Phase 1 cannot send set_* commands to any fixture.
+  app.get('/lighting/status', async () => amaran.status);
+
+  app.get('/lighting/discover', async (_req, reply) => {
+    if (!amaran.isEnabled) {
+      return reply.code(503).send({ error: 'amaran integration is disabled' });
+    }
+    try {
+      const protocolVersions = await amaran.getProtocolVersions();
+      const fixtures = await amaran.listFixtures();
+      const devices = await amaran.listDevices();
+      const scenes = await amaran.listScenes();
+      return { ok: true, protocolVersions, fixtures, devices, scenes };
+    } catch (err) {
+      log.warn({ err: (err as Error).message }, 'amaran discovery failed');
+      return reply.code(503).send({ error: (err as Error).message });
+    }
+  });
+
+  app.get<{ Params: { nodeId: string } }>('/lighting/fixture/:nodeId/state', async (req, reply) => {
+    if (!amaran.isEnabled) {
+      return reply.code(503).send({ error: 'amaran integration is disabled' });
+    }
+    try {
+      const fixture = (await amaran.listFixtures()).find(
+        (item) => item.nodeId === req.params.nodeId,
+      );
+      if (!fixture) return reply.code(404).send({ error: 'Unknown amaran fixture' });
+      const sleep = await amaran.getSleep(fixture.nodeId);
+      const cct = await amaran.getCct(fixture.nodeId);
+      return { ok: true, fixture, sleep, ...cct };
+    } catch (err) {
+      log.warn(
+        { nodeId: req.params.nodeId, err: (err as Error).message },
+        'amaran fixture state read failed',
+      );
+      return reply.code(503).send({ error: (err as Error).message });
+    }
+  });
+
+  app.get<{ Querystring: { profile?: string } }>('/scene/plan', async (req, reply) => {
+    const profileName = req.query.profile ?? state.activeProfile;
+    if (profileName !== 'default' && !cfg.profiles[profileName]) {
+      return reply.code(404).send({ error: `Unknown profile "${profileName}"` });
+    }
+    return buildScenePlan(profileName, resolveProfile(cfg, profileName));
+  });
+
   // --------------------------------------------------------- health/status
 
   app.get('/health', async () => runChecks());
@@ -335,6 +399,7 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
       auto: director.status,
       obsConnected: obs.isConnected,
       atemConnected: atem.isConnected,
+      amaran: amaran.status,
       record,
       capture: captureWatchdog
         ? { watching: captureWatchdog.isRunning, frozen: captureWatchdog.isFrozen }

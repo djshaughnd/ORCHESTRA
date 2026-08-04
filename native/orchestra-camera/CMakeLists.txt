@@ -24,7 +24,21 @@ add_executable(sdktest src/sdktest.cpp)
 target_include_directories(sdktest PRIVATE "${CRSDK}/include")
 target_link_directories(sdktest PRIVATE "${CRSDK}/lib")
 target_link_libraries(sdktest PRIVATE Cr_Core)
-# libCr_Core loads CrAdapter/* relative to itself at runtime -> rpath to lib/.
+# Sony's macOS runtime looks for adapters under
+# <executable>/Contents/Frameworks/CrAdapter. Mirror the layout used by the
+# official SimpleCli sample so USB/IP enumeration works outside an app bundle.
 set_target_properties(sdktest PROPERTIES
-  BUILD_RPATH "${CRSDK}/lib"
-  INSTALL_RPATH "${CRSDK}/lib")
+  BUILD_RPATH "@executable_path"
+  INSTALL_RPATH "@executable_path")
+
+add_custom_command(TARGET sdktest PRE_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+    "$<TARGET_FILE_DIR:sdktest>/Contents/Frameworks/CrAdapter"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CRSDK}/lib/libCr_Core.dylib"
+    "${CRSDK}/lib/libmonitor_protocol.dylib"
+    "${CRSDK}/lib/libmonitor_protocol_pf.dylib"
+    "$<TARGET_FILE_DIR:sdktest>"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CRSDK}/lib/CrAdapter"
+    "$<TARGET_FILE_DIR:sdktest>/Contents/Frameworks/CrAdapter")
