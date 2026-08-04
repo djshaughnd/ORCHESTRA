@@ -157,6 +157,19 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
     const r = await openSession(body);
     if (!r.ok) return reply.code(r.code).send({ error: r.error });
 
+    // Open every mode on its home shot: cut to the profile's default cam
+    // before recording starts. Best-effort — never blocks the session.
+    if (cfg.atem.enabled && atem.isConnected) {
+      try {
+        await atem.cut(profile.atemDefaultCam);
+      } catch (err) {
+        log.warn(
+          { err: (err as Error).message, cam: profile.atemDefaultCam },
+          'could not cut to profile default cam on /go',
+        );
+      }
+    }
+
     const record = body.record !== false; // defaults to true
     if (record) {
       try {

@@ -28,6 +28,9 @@ echo "Building Stream Deck triggers into: $OUT"
 # GO = session + record + BEAT-REACTIVE cutting (fast, music-driven). REEL below
 # runs the fixed scripted mixingReel instead, as a deterministic fallback.
 build "GO"        "\$HOME/Documents/GitHub/ORCHESTRA/scripts/ensure-studio.sh; curl -sS -X POST $BASE/go -H 'Content-Type: application/json' -d '{\\\"profile\\\":\\\"dj\\\",\\\"reactive\\\":true}'"
+# STUDIO = desk work on CAM3: boots the studio, locks program to the desktop
+# cam (profile studio, atemDefaultCam 3), records. No auto-switching.
+build "STUDIO"    "\$HOME/Documents/GitHub/ORCHESTRA/scripts/ensure-studio.sh; curl -sS -X POST $BASE/go -H 'Content-Type: application/json' -d '{\\\"profile\\\":\\\"studio\\\"}'"
 build "MARK"      "curl -sS -X POST $BASE/session/mark -H 'Content-Type: application/json' -d '{\\\"label\\\":\\\"mark\\\"}'"
 build "END"       "curl -sS -X POST $BASE/session/end"
 build "CAM1-HERO" "curl -sS -X POST $BASE/cut/1"
