@@ -12,6 +12,7 @@ import type { ObsClient } from './clients/obs.js';
 import type { CaptureWatchdog } from './capture-watchdog.js';
 import type { CameraClient } from './clients/camera.js';
 import type { AmaranClient } from './clients/amaran.js';
+import type { LightingDirector } from './lighting.js';
 import { buildScenePlan } from './scene-plan.js';
 
 export interface StudioState {
@@ -28,6 +29,7 @@ export interface HttpDeps {
   captureWatchdog: CaptureWatchdog | null;
   camera: CameraClient;
   amaran: AmaranClient;
+  lighting: LightingDirector;
   state: StudioState;
   runChecks: () => Promise<HealthReport>;
   log: Logger;
@@ -45,6 +47,7 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
     captureWatchdog,
     camera,
     amaran,
+    lighting,
     state,
     runChecks,
     log,
@@ -171,6 +174,11 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
           'could not cut to profile default cam on /go',
         );
       }
+    }
+
+    // Light the scene first so the camera meters against the final look.
+    if (profile.sceneRecipe) {
+      await lighting.apply(profile.sceneRecipe);
     }
 
     // Push the profile's exposure lock so the camera stops auto-ISO grain.
@@ -418,6 +426,23 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
     },
   );
 
+  // Apply a profile's lighting recipe by hand (same path /go uses).
+  app.post<{ Params: { name: string } }>('/lighting/apply/:name', async (req, reply) => {
+    if (!cfg.amaran.enabled) {
+      return reply.code(400).send({ error: 'amaran.enabled=false in studio.yaml' });
+    }
+    const { name } = req.params;
+    if (name !== 'default' && !cfg.profiles[name]) {
+      return reply.code(404).send({ error: `Unknown profile "${name}"` });
+    }
+    const profile = resolveProfile(cfg, name);
+    if (!profile.sceneRecipe) {
+      return reply.code(400).send({ error: `Profile "${name}" has no sceneRecipe` });
+    }
+    const results = await lighting.apply(profile.sceneRecipe);
+    return { ok: results.every((r) => r.ok), profile: name, results };
+  });
+
   app.get('/health', async () => runChecks());
 
   app.get('/status', async () => {
@@ -454,6 +479,7 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
         ? { watching: captureWatchdog.isRunning, frozen: captureWatchdog.isFrozen }
         : null,
       camera: camera.isEnabled ? camera.snapshot : null,
+      lighting: cfg.amaran.enabled ? lighting.snapshot : null,
       uptimeSeconds: Math.floor((Date.now() - deps.startedAt.getTime()) / 1000),
     };
   });

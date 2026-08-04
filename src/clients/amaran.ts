@@ -281,6 +281,36 @@ export class AmaranClient {
     };
   }
 
+  /** Wake or sleep a fixture (sleep=true is "off"). */
+  async setSleep(nodeId: string, sleep: boolean): Promise<boolean> {
+    const value = await this.request<unknown>('set_sleep', nodeId, { sleep });
+    if (typeof value !== 'boolean') throw new Error('invalid sleep state returned by amaran');
+    return value;
+  }
+
+  /**
+   * Set colour temperature + intensity (+ optional green/magenta) on a fixture.
+   * intensity is amaran's 0..1000 scale (1000 = 100%).
+   */
+  async setCct(nodeId: string, target: { cct?: number; intensity?: number; gm?: number }): Promise<AmaranCctState> {
+    // The device expects a full CCT triple; fill any gap from current state so
+    // setting one field never resets the others.
+    const current = await this.getCct(nodeId);
+    const args = {
+      cct: target.cct ?? current.cct,
+      intensity: target.intensity ?? current.intensity,
+      gm: target.gm ?? current.gm ?? 100,
+    };
+    const value = await this.request<unknown>('set_cct', nodeId, args);
+    if (!value || typeof value !== 'object') throw new Error('invalid CCT state returned by amaran');
+    const state = value as Record<string, unknown>;
+    return {
+      cct: typeof state.cct === 'number' ? state.cct : args.cct,
+      intensity: typeof state.intensity === 'number' ? state.intensity : args.intensity,
+      ...(typeof state.gm === 'number' ? { gm: state.gm } : {}),
+    };
+  }
+
   private request<T>(action: string, nodeId?: string, args?: Record<string, unknown>): Promise<T> {
     const operation = this.requestQueue.then(async () => {
       await this.connect();

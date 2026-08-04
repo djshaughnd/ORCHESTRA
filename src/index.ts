@@ -16,6 +16,7 @@ import { diskFreeBytesAt, isVolumeMounted, pingHost, runHealthChecks } from './h
 import { HealthMonitor } from './monitor.js';
 import { buildTakeFilename } from './rename.js';
 import { Director, mulToDb } from './switcher.js';
+import { LightingDirector } from './lighting.js';
 import { resolveAmaranSecret } from './secrets.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -79,6 +80,7 @@ async function main(): Promise<void> {
     cfg.camera.enabled,
     log.child({ client: 'camera' }),
   );
+  const lighting = new LightingDirector(amaran, log.child({ mod: 'lighting' }));
   const director = new Director(atem, log.child({ mod: 'director' }));
 
   // Capture watchdog: only meaningful when a source name is configured.
@@ -215,6 +217,7 @@ async function main(): Promise<void> {
     monitor,
     captureWatchdog,
     camera,
+    lighting,
     amaran,
     state,
     runChecks,
