@@ -61,6 +61,27 @@ recording → run the named sequence, in one call. Verified live: a single call
 started session + recording + watchdog + `mixingReel` together. This is the
 Stream Deck "GO" button.
 
+## Resolution chain — the grain root cause (found 2026-08-04)
+
+**The ATEM Mini Pro ISO is 1080p ONLY — it physically cannot pass 4K.** The
+cameras shoot 4K, but everything downstream of the ATEM is 1920x1080.
+
+A recording was found at **2160x3840 (vertical "4K")**: OBS was cropping a
+~608x1080 slice out of the 1080p ATEM feed and upscaling it ~3.5x. That is
+**FAKE 4K** — 0.65 MP of real detail smeared across an 8.3 MP frame, which
+reads as heavy grain/mush no matter the bitrate (it was already 50 Mbps HEVC).
+File cost: 2.7 GB for 7.6 minutes.
+
+Fix applied: OBS canvas **1080x1920** (vertical 1080p reel), ScaleType
+**lanczos** (sharper than bicubic), record bitrate 50 -> 25 Mbps (right-sized
+for 1080p). Source framed with BOUNDS_SCALE_OUTER to fill 9:16 full-bleed.
+
+**Ceiling to remember:** ANY vertical reel taken from the ATEM involves some
+upscale, because a 9:16 crop of a 1080p landscape frame is only ~608 px wide.
+Genuinely native vertical needs one of: rotate a camera 90 degrees; capture one
+camera's 4K HDMI directly (bypassing the ATEM, losing switching); or shoot
+landscape and crop vertical in post.
+
 ## Recommended hardware upgrade (phase 2, optional)
 
 ATEM **HDMI out → Elgato Cam Link** (you already run Elgato). The HDMI-out feed
