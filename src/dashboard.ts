@@ -59,6 +59,22 @@ async function poll() {
         s.capture.watching ? 'watchdog on the recording feed' : 'watchdog arms with recording'
       );
     }
+    if (s.camera) {
+      const cam = s.camera;
+      if (cam.error) {
+        html += tile('bad', 'Camera', 'no link', cam.error);
+      } else if (cam.iso != null) {
+        // raw SDK values -> human: fnumber is f-stop x100.
+        const f = cam.fnumber != null ? 'f/' + (cam.fnumber / 100).toFixed(1) : '—';
+        const applied = cam.lastApplied
+          ? 'locked ISO ' + (cam.lastApplied.iso != null ? cam.lastApplied.iso : '—')
+          : 'live (not locked)';
+        html += tile('ok', 'Camera', 'ISO ' + cam.iso + ' · ' + f,
+          (cam.model || 'camera') + ' · ' + applied);
+      } else {
+        html += tile('', 'Camera', 'idle', 'no reading yet');
+      }
+    }
     for (const name in h.checks) {
       const c = h.checks[name];
       html += tile(c.ok ? 'ok' : 'bad', name, c.ok ? 'OK' : 'FAIL', c.detail);

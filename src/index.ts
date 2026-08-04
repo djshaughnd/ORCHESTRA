@@ -6,6 +6,7 @@ import { createLogger } from './log.js';
 import { ObsClient } from './clients/obs.js';
 import { createAtemClient } from './clients/atem.js';
 import { CompanionClient } from './clients/companion.js';
+import { CameraClient } from './clients/camera.js';
 import { AmaranClient } from './clients/amaran.js';
 import { CaptureWatchdog } from './capture-watchdog.js';
 import { namePartsForNow, SessionManager } from './session.js';
@@ -72,6 +73,11 @@ async function main(): Promise<void> {
       ...(amaranSecret ? { secret: amaranSecret } : {}),
     },
     log.child({ client: 'amaran' }),
+  );
+  const camera = new CameraClient(
+    resolve(repoRoot, cfg.camera.binPath),
+    cfg.camera.enabled,
+    log.child({ client: 'camera' }),
   );
   const director = new Director(atem, log.child({ mod: 'director' }));
 
@@ -208,6 +214,7 @@ async function main(): Promise<void> {
     director,
     monitor,
     captureWatchdog,
+    camera,
     amaran,
     state,
     runChecks,

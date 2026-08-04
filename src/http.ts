@@ -10,6 +10,7 @@ import type { Director } from './switcher.js';
 import type { AtemClient } from './clients/atem.js';
 import type { ObsClient } from './clients/obs.js';
 import type { CaptureWatchdog } from './capture-watchdog.js';
+import type { CameraClient } from './clients/camera.js';
 import type { AmaranClient } from './clients/amaran.js';
 import { buildScenePlan } from './scene-plan.js';
 
@@ -25,6 +26,7 @@ export interface HttpDeps {
   director: Director;
   monitor: HealthMonitor;
   captureWatchdog: CaptureWatchdog | null;
+  camera: CameraClient;
   amaran: AmaranClient;
   state: StudioState;
   runChecks: () => Promise<HealthReport>;
@@ -41,6 +43,7 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
     director,
     monitor,
     captureWatchdog,
+    camera,
     amaran,
     state,
     runChecks,
@@ -168,6 +171,12 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
           'could not cut to profile default cam on /go',
         );
       }
+    }
+
+    // Push the profile's exposure lock so the camera stops auto-ISO grain.
+    // Best-effort and awaited before record so the take starts locked.
+    if (profile.cameraLock) {
+      await camera.apply(profile.cameraLock);
     }
 
     const record = body.record !== false; // defaults to true
@@ -382,6 +391,33 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
 
   // --------------------------------------------------------- health/status
 
+  // ------------------------------------------------------------------ camera
+
+  // Read the camera's live settings (Sony SDK). Also refreshes /status.
+  app.get('/camera', async (_req, reply) => {
+    if (!camera.isEnabled) {
+      return reply.code(400).send({ error: 'camera.enabled=false in studio.yaml' });
+    }
+    await camera.refresh();
+    return camera.snapshot;
+  });
+
+  // Push an exposure lock by hand (same path /go uses per profile).
+  app.post<{ Body: { iso?: number; fnumber?: number; shutter?: number } | null }>(
+    '/camera/apply',
+    async (req, reply) => {
+      if (!camera.isEnabled) {
+        return reply.code(400).send({ error: 'camera.enabled=false in studio.yaml' });
+      }
+      const body = req.body ?? {};
+      if (body.iso == null && body.fnumber == null && body.shutter == null) {
+        return reply.code(400).send({ error: 'pass at least one of iso/fnumber/shutter' });
+      }
+      const ok = await camera.apply(body);
+      return reply.code(ok ? 200 : 503).send({ ok, ...camera.snapshot });
+    },
+  );
+
   app.get('/health', async () => runChecks());
 
   app.get('/status', async () => {
@@ -417,6 +453,7 @@ export function buildServer(deps: HttpDeps): FastifyInstance {
       capture: captureWatchdog
         ? { watching: captureWatchdog.isRunning, frozen: captureWatchdog.isFrozen }
         : null,
+      camera: camera.isEnabled ? camera.snapshot : null,
       uptimeSeconds: Math.floor((Date.now() - deps.startedAt.getTime()) / 1000),
     };
   });

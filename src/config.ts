@@ -97,6 +97,26 @@ export const CameraTargetSchema = z
     message: 'camera target must set at least one property',
   });
 
+/**
+ * Executable exposure lock pushed to the Sony camera on session start.
+ * Values are the SDK's RAW encoding (what `orchestra-camera get` reports):
+ *   iso     — plain ISO number (400, 800, 1600…)
+ *   fnumber — f-stop x100 (180 = f/1.8, 400 = f/4.0)
+ *   shutter — raw SDK shutter code (e.g. 65661 = 1/125)
+ * Distinct from sceneRecipe.cameras, which is the human-readable dry-run plan.
+ */
+export const CameraSettingsSchema = z
+  .object({
+    iso: z.number().int().positive().optional(),
+    fnumber: z.number().int().positive().optional(),
+    shutter: z.number().int().positive().optional(),
+  })
+  .refine((s) => s.iso != null || s.fnumber != null || s.shutter != null, {
+    message: 'cameraLock must set at least one of iso/fnumber/shutter',
+  });
+
+export type CameraSettings = z.infer<typeof CameraSettingsSchema>;
+
 export const SceneRecipeSchema = z.object({
   lighting: z
     .object({
@@ -129,6 +149,9 @@ export const ProfileSchema = z.object({
   // Beat-reactive director: fast, music-driven cutting (POST /reactive/arm,
   // or /go with reactive:true). Reads the OBS audio meters for beats + energy.
   beatReactive: BeatReactiveSchema.default({}),
+  // Exposure lock pushed to the Sony camera when a session starts (raw SDK
+  // values). Stops the camera cranking auto-ISO in a dark room.
+  cameraLock: CameraSettingsSchema.optional(),
 });
 
 export type ProfileConfig = z.infer<typeof ProfileSchema>;
@@ -195,6 +218,15 @@ export const ConfigSchema = z.object({
       requestTimeoutMs: z.number().int().positive().default(2500),
       // amaran devices process at most one update every 200 ms.
       minRequestIntervalMs: z.number().int().min(200).default(200),
+    })
+    .default({}),
+  camera: z
+    .object({
+      // Sony Camera Remote SDK control via the native orchestra-camera binary.
+      enabled: z.boolean().default(false),
+      binPath: z
+        .string()
+        .default('native/orchestra-camera/build/orchestra-camera'),
     })
     .default({}),
   atem: z.object({
