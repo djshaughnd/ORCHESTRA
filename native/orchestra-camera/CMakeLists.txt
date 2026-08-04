@@ -52,3 +52,13 @@ target_link_libraries(camlist PRIVATE Cr_Core)
 set_target_properties(camlist PROPERTIES
   BUILD_RPATH "@executable_path"
   INSTALL_RPATH "@executable_path")
+
+# orchestra-camera — the control tool the ORCHESTRA daemon shells out to.
+# Prints JSON: list / get / set (--iso --shutter --fnumber).
+add_executable(orchestra-camera src/orchestra_camera.cpp)
+target_include_directories(orchestra-camera PRIVATE "${CRSDK}/include")
+target_link_directories(orchestra-camera PRIVATE "${CRSDK}/lib")
+target_link_libraries(orchestra-camera PRIVATE Cr_Core)
+set_target_properties(orchestra-camera PROPERTIES
+  BUILD_RPATH "@executable_path"
+  INSTALL_RPATH "@executable_path")
