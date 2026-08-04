@@ -23,6 +23,38 @@ Shaughn ran the full "walk in, hit one button" flow on real hardware and confirm
 
 Open threads the user paused on (all optional, none blocking): Sony SDK ISO-lock (needs user to register/download the SDK — both cams support Wi-Fi, no cables needed), amaran lighting control, OBS vertical/reel canvas format, camera manual-ISO.
 
+## Studio lighting — fixture roles (IMPORTANT, 2026-08-04)
+
+**FIXTURE NAMES ARE MISLEADING.** Confirmed by Shaughn:
+- **"FILL #2" is the KEY light — it lights his FACE.** Should be the brightest.
+- **"#1 KEY" is the BACK/RIM light** on the rear wall. Separation only.
+- "amaran Ace 25c LEFT"/"Right" are accents/practicals.
+
+The scene recipes originally had this backwards (600 on the back wall, 300 on his
+face), which directly contributed to the grain. Recipes now light the face first
+(studio 750, dj 550). Do not trust the fixture names — trust this table.
+
+## Grain root cause — MEASURED 2026-08-04
+
+The footage is grainy because it is **massively underexposed**, not because of
+resolution/bitrate. Measured off the live ATEM feed:
+- **mean brightness 19.8/255 (7.8%)**
+- **81.9% of pixels below 10% brightness**
+- black bars: 288px left / 152px right (~23% of the frame wasted)
+- two of four amaran fixtures were OFF; key-on-face was at 13%
+
+Also fixed the same day: OBS was recording **fake 4K** (2160x3840) by upscaling
+the 1080p ATEM feed ~3.5x. Now 1080x1920 + lanczos + 25 Mbps. The ATEM Mini Pro
+ISO is **1080p-only hardware** — the capture device's max preset is 1920x1080, so
+real 4K through the ATEM is impossible. Past 4K that looked fine was almost
+certainly a directly-captured camera, not this path.
+
+**Still open (biggest wins, in order):** (1) raise the lights / light the face,
+(2) the studio camera is mounted **rotated 90 degrees** — rotating it in OBS
+would give a NATIVE 1080x1920 vertical with zero upscaling, the sharpest reel
+this rig can produce, (3) lock camera ISO down (needs the camera back on USB —
+it keeps dropping off; disable its power-save while tethered).
+
 ## Immediate next steps (before ANY new features)
 
 1. ~~**Wire the Stream Deck**~~ **DONE 2026-07-09** — built a dedicated **"ORCHESTRA" profile** on the Stream Deck + (via the app UI, driven by computer-use, no risk to the user's 40 existing profiles). 7 keys, all "System → Open" actions pointing at the tested trigger apps in `~/Documents/ORCHESTRA-StreamDeck/`: row 1 = GO / CAM1 / CAM2 / KILL, row 2 = MARK / END / REEL. Verified the .app→daemon→ATEM chain live (launching CAM1-HERO.app cut the real ATEM to program 1 — identical to a physical key press). Only the literal physical press is untested (can't press hardware via automation) — user presses GO to confirm. REEL.app switches to the dj profile before running the reel so it works regardless of active profile. The three approaches, for reference:
