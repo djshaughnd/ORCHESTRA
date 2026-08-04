@@ -42,3 +42,13 @@ add_custom_command(TARGET sdktest PRE_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CRSDK}/lib/CrAdapter"
     "$<TARGET_FILE_DIR:sdktest>/Contents/Frameworks/CrAdapter")
+
+# camlist — enumerate cameras and print model/connection/adaptor details.
+# Verified 2026-08-03 against a Sony A7 IV (ILCE-7M4) over USB.
+add_executable(camlist src/camlist.cpp)
+target_include_directories(camlist PRIVATE "${CRSDK}/include")
+target_link_directories(camlist PRIVATE "${CRSDK}/lib")
+target_link_libraries(camlist PRIVATE Cr_Core)
+set_target_properties(camlist PROPERTIES
+  BUILD_RPATH "@executable_path"
+  INSTALL_RPATH "@executable_path")
